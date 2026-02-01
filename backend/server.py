@@ -1349,6 +1349,20 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+@app.on_event("startup")
+async def startup_event():
+    """Start the scheduler for automated reminders"""
+    # Run automated reminders every day at 9:00 AM
+    scheduler.add_job(
+        send_automated_reminders,
+        CronTrigger(hour=9, minute=0),
+        id="automated_reminders",
+        replace_existing=True
+    )
+    scheduler.start()
+    logger.info("Scheduler started for automated reminders")
+
 @app.on_event("shutdown")
 async def shutdown_db_client():
+    scheduler.shutdown()
     client.close()
