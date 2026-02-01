@@ -690,6 +690,91 @@ const Payments = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Pending Payments / Send Reminders Dialog */}
+      <Dialog open={pendingDialogOpen} onOpenChange={setPendingDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle style={{ fontFamily: 'Manrope, sans-serif' }}>
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5 text-amber-500" />
+                Paiements en attente - {MONTHS_FR[new Date().getMonth() + 1]} {new Date().getFullYear()}
+              </div>
+            </DialogTitle>
+            <DialogDescription>
+              {pendingPayments.length > 0 
+                ? `${pendingPayments.length} locataire(s) n'ont pas encore payé ce mois`
+                : 'Tous les loyers du mois sont à jour'}
+            </DialogDescription>
+          </DialogHeader>
+          
+          {pendingPayments.length > 0 ? (
+            <div className="space-y-4 py-4 max-h-96 overflow-y-auto">
+              {pendingPayments.map((pending) => (
+                <div 
+                  key={pending.lease_id} 
+                  className="flex items-center justify-between p-4 border rounded-lg bg-muted/30"
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-500/10 text-amber-600">
+                      <User className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <p className="font-medium">
+                        {pending.tenant?.first_name} {pending.tenant?.last_name}
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        {pending.property?.name}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {pending.tenant?.email}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-bold text-lg text-amber-600">
+                      {formatCurrency(pending.amount_due)}
+                    </p>
+                    <p className="text-xs text-muted-foreground">en attente</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center py-8">
+              <div className="p-3 rounded-full bg-emerald-500/10 mb-4">
+                <CreditCard className="h-8 w-8 text-emerald-500" />
+              </div>
+              <p className="text-muted-foreground">Tous les paiements sont à jour</p>
+            </div>
+          )}
+          
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPendingDialogOpen(false)}>
+              Fermer
+            </Button>
+            {pendingPayments.length > 0 && (
+              <Button 
+                onClick={handleSendReminders}
+                disabled={sendingReminders}
+                data-testid="confirm-send-reminders-btn"
+              >
+                {sendingReminders ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Envoi en cours...
+                  </>
+                ) : (
+                  <>
+                    <Send className="mr-2 h-4 w-4" />
+                    Envoyer les rappels ({pendingPayments.length})
+                  </>
+                )}
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
