@@ -290,10 +290,50 @@ const Payments = () => {
             Suivez les loyers perçus
           </p>
         </div>
-        <Button 
-          onClick={() => setDialogOpen(true)} 
-          className="btn-hover"
-          disabled={leases.length === 0}
+        <div className="flex gap-2">
+          <Button 
+            variant="outline"
+            onClick={handleLoadPending}
+            data-testid="send-reminders-btn"
+          >
+            <Send className="mr-2 h-4 w-4" />
+            Rappels
+          </Button>
+          <div className="flex items-center gap-2">
+            <Select value={exportYear} onValueChange={setExportYear}>
+              <SelectTrigger className="w-28" data-testid="export-year-select">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Tous</SelectItem>
+                {[...Array(5)].map((_, i) => {
+                  const year = new Date().getFullYear() - i;
+                  return (
+                    <SelectItem key={year} value={year.toString()}>
+                      {year}
+                    </SelectItem>
+                  );
+                })}
+              </SelectContent>
+            </Select>
+            <Button 
+              variant="outline"
+              onClick={handleExportExcel}
+              disabled={exporting}
+              data-testid="export-excel-btn"
+            >
+              {exporting ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <FileSpreadsheet className="mr-2 h-4 w-4" />
+              )}
+              Excel
+            </Button>
+          </div>
+          <Button 
+            onClick={() => setDialogOpen(true)} 
+            className="btn-hover"
+            disabled={leases.length === 0}
           data-testid="add-payment-btn"
         >
           <Plus className="mr-2 h-4 w-4" />
