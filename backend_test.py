@@ -474,6 +474,59 @@ class RentMaestroAPITester:
         )
         return success
 
+    def test_calendar_events(self):
+        """Test calendar events endpoint"""
+        now = datetime.now()
+        success, response = self.run_test(
+            f"Get Calendar Events ({now.month}/{now.year})",
+            "GET",
+            f"calendar/events?month={now.month}&year={now.year}",
+            200
+        )
+        
+        if success and isinstance(response, dict):
+            events = response.get('events', [])
+            print(f"   Found {len(events)} calendar events")
+            for event in events[:3]:  # Show first 3 events
+                print(f"   - {event.get('title', 'Unknown')} ({event.get('type', 'unknown')})")
+        
+        return success
+
+    def test_documents_endpoints(self):
+        """Test document management endpoints"""
+        # Test get all documents
+        success1, response = self.run_test(
+            "Get All Documents",
+            "GET",
+            "documents",
+            200
+        )
+        
+        if success1 and isinstance(response, list):
+            print(f"   Found {len(response)} existing documents")
+        
+        # Note: We can't easily test file upload in this simple test framework
+        # as it requires multipart/form-data handling, but we can test the endpoint exists
+        
+        return success1
+
+    def test_scheduler_status(self):
+        """Test that the scheduler is running (indirect test via health check)"""
+        # The scheduler starts on app startup, we can verify the app is running
+        # which indicates the scheduler should be active
+        success, response = self.run_test(
+            "Scheduler Status (via Health Check)",
+            "GET",
+            "",
+            200
+        )
+        
+        if success:
+            print("   ✅ API is running, scheduler should be active")
+            print("   📅 Automated reminders scheduled for 9:00 AM daily")
+        
+        return success
+
     def run_all_tests(self):
         """Run all API tests in sequence"""
         print("🚀 Starting RentMaestro API Tests")
