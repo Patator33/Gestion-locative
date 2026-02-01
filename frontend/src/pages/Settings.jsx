@@ -1,19 +1,27 @@
 import React, { useState, useEffect } from 'react';
-import { notificationsAPI } from '../lib/api';
+import { notificationsAPI, remindersAPI } from '../lib/api';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Switch } from '../components/ui/switch';
 import { Separator } from '../components/ui/separator';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
+import { Badge } from '../components/ui/badge';
 import { toast } from 'sonner';
 import { 
-  Settings as SettingsIcon,
   Bell,
   CreditCard,
   Calendar,
   Home,
-  Save
+  Save,
+  Mail,
+  Send,
+  CheckCircle,
+  AlertCircle,
+  Moon,
+  Sun,
+  Loader2
 } from 'lucide-react';
 
 const Settings = () => {
@@ -23,19 +31,33 @@ const Settings = () => {
     lease_ending: true,
     lease_ending_days: 60,
     vacancy_alert: true,
-    vacancy_alert_days: 30
+    vacancy_alert_days: 30,
+    email_reminders: false,
+    reminder_frequency: 'weekly',
+    smtp_email: '',
+    smtp_password: '',
+    smtp_configured: false
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [testingSmtp, setTestingSmtp] = useState(false);
+  const [darkMode, setDarkMode] = useState(false);
 
   useEffect(() => {
     loadSettings();
+    // Check if dark mode is enabled
+    const isDark = document.documentElement.classList.contains('dark');
+    setDarkMode(isDark);
   }, []);
 
   const loadSettings = async () => {
     try {
       const response = await notificationsAPI.getSettings();
-      setSettings(response.data);
+      setSettings({
+        ...settings,
+        ...response.data,
+        smtp_password: response.data.smtp_password ? '••••••••••••••••' : ''
+      });
     } catch (error) {
       toast.error('Erreur lors du chargement des paramètres');
     } finally {
@@ -46,12 +68,47 @@ const Settings = () => {
   const handleSave = async () => {
     setSaving(true);
     try {
-      await notificationsAPI.updateSettings(settings);
+      const dataToSave = { ...settings };
+      // Don't send masked password
+      if (dataToSave.smtp_password === '••••••••••••••••') {
+        delete dataToSave.smtp_password;
+      }
+      await notificationsAPI.updateSettings(dataToSave);
       toast.success('Paramètres enregistrés avec succès');
     } catch (error) {
       toast.error('Erreur lors de l\'enregistrement');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleTestSmtp = async () => {
+    setTestingSmtp(true);
+    try {
+      // Save settings first if password was changed
+      if (settings.smtp_password && settings.smtp_password !== '••••••••••••••••') {
+        await notificationsAPI.updateSettings(settings);
+      }
+      
+      const response = await remindersAPI.testSmtp();
+      toast.success(response.data.message);
+      setSettings(prev => ({ ...prev, smtp_configured: true }));
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Erreur lors du test SMTP');
+    } finally {
+      setTestingSmtp(false);
+    }
+  };
+
+  const toggleDarkMode = () => {
+    const newDarkMode = !darkMode;
+    setDarkMode(newDarkMode);
+    if (newDarkMode) {
+      document.documentElement.classList.add('dark');
+      localStorage.setItem('theme', 'dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+      localStorage.setItem('theme', 'light');
     }
   };
 
@@ -71,9 +128,189 @@ const Settings = () => {
           Paramètres
         </h1>
         <p className="text-muted-foreground mt-1">
-          Configurez les notifications et préférences
+          Configurez les notifications, emails et préférences
         </p>
       </div>
+
+      {/* Appearance Settings */}
+      <Card className="border">
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            {darkMode ? <Moon className="h-5 w-5 text-primary" /> : <Sun className="h-5 w-5 text-primary" />}
+            <CardTitle style={{ fontFamily: 'Manrope, sans-serif' }}>
+              Apparence
+            </CardTitle>
+          </div>
+          <CardDescription>
+            Personnalisez l'apparence de l'application
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-between">
+            <div className="flex gap-3">
+              <div className="p-2 rounded-lg bg-primary/10">
+                <Moon className="h-5 w-5 text-primary" />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-base font-medium">Mode sombre</Label>
+                <p className="text-sm text-muted-foreground">
+                  Activer le thème sombre pour réduire la fatigue oculaire
+                </p>
+              </div>
+            </div>
+            <Switch
+              checked={darkMode}
+              onCheckedChange={toggleDarkMode}
+              data-testid="dark-mode-switch"
+            />
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Email Configuration */}
+      <Card className="border">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Mail className="h-5 w-5 text-primary" />
+              <CardTitle style={{ fontFamily: 'Manrope, sans-serif' }}>
+                Configuration Email (Gmail SMTP)
+              </CardTitle>
+            </div>
+            {settings.smtp_configured ? (
+              <Badge variant="default" className="bg-emerald-500">
+                <CheckCircle className="h-3 w-3 mr-1" />
+                Configuré
+              </Badge>
+            ) : (
+              <Badge variant="secondary">
+                <AlertCircle className="h-3 w-3 mr-1" />
+                Non configuré
+              </Badge>
+            )}
+          </div>
+          <CardDescription>
+            Configurez Gmail pour envoyer des rappels automatiques aux locataires
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="grid gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="smtp_email">Adresse Gmail</Label>
+              <Input
+                id="smtp_email"
+                type="email"
+                value={settings.smtp_email || ''}
+                onChange={(e) => setSettings({ ...settings, smtp_email: e.target.value, smtp_configured: false })}
+                placeholder="votre.email@gmail.com"
+                data-testid="smtp-email-input"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="smtp_password">Mot de passe d'application</Label>
+              <Input
+                id="smtp_password"
+                type="password"
+                value={settings.smtp_password || ''}
+                onChange={(e) => setSettings({ ...settings, smtp_password: e.target.value, smtp_configured: false })}
+                placeholder="••••••••••••••••"
+                data-testid="smtp-password-input"
+              />
+              <p className="text-xs text-muted-foreground">
+                Créez un mot de passe d'application sur{' '}
+                <a 
+                  href="https://myaccount.google.com/apppasswords" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="text-primary hover:underline"
+                >
+                  myaccount.google.com/apppasswords
+                </a>
+              </p>
+            </div>
+          </div>
+          
+          <Button 
+            variant="outline" 
+            onClick={handleTestSmtp}
+            disabled={!settings.smtp_email || !settings.smtp_password || testingSmtp}
+            data-testid="test-smtp-btn"
+          >
+            {testingSmtp ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Test en cours...
+              </>
+            ) : (
+              <>
+                <Send className="mr-2 h-4 w-4" />
+                Tester la connexion
+              </>
+            )}
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* Email Reminders Settings */}
+      <Card className="border">
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <Send className="h-5 w-5 text-primary" />
+            <CardTitle style={{ fontFamily: 'Manrope, sans-serif' }}>
+              Rappels par email
+            </CardTitle>
+          </div>
+          <CardDescription>
+            Configurez les rappels automatiques pour les loyers impayés
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex gap-3">
+              <div className="p-2 rounded-lg bg-primary/10">
+                <Mail className="h-5 w-5 text-primary" />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-base font-medium">Activer les rappels automatiques</Label>
+                <p className="text-sm text-muted-foreground">
+                  Envoyer automatiquement des rappels aux locataires en retard de paiement
+                </p>
+              </div>
+            </div>
+            <Switch
+              checked={settings.email_reminders}
+              onCheckedChange={(checked) => setSettings({ ...settings, email_reminders: checked })}
+              disabled={!settings.smtp_configured}
+              data-testid="email-reminders-switch"
+            />
+          </div>
+
+          {settings.email_reminders && (
+            <div className="space-y-2 ml-14">
+              <Label>Fréquence des rappels</Label>
+              <Select 
+                value={settings.reminder_frequency} 
+                onValueChange={(value) => setSettings({ ...settings, reminder_frequency: value })}
+              >
+                <SelectTrigger className="w-64" data-testid="reminder-frequency-select">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="daily">Quotidien</SelectItem>
+                  <SelectItem value="weekly">Hebdomadaire (par défaut)</SelectItem>
+                  <SelectItem value="monthly">Mensuel</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+          
+          {!settings.smtp_configured && (
+            <p className="text-sm text-amber-600 bg-amber-50 p-3 rounded-lg">
+              Vous devez d'abord configurer et tester la connexion SMTP ci-dessus pour activer les rappels.
+            </p>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Notification Settings */}
       <Card className="border">
@@ -81,11 +318,11 @@ const Settings = () => {
           <div className="flex items-center gap-2">
             <Bell className="h-5 w-5 text-primary" />
             <CardTitle style={{ fontFamily: 'Manrope, sans-serif' }}>
-              Notifications
+              Alertes dans l'application
             </CardTitle>
           </div>
           <CardDescription>
-            Configurez les alertes automatiques
+            Configurez les alertes qui apparaissent dans le tableau de bord
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
