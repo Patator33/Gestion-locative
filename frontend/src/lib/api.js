@@ -101,7 +101,15 @@ export const receiptsAPI = {
 
 // Export
 export const exportAPI = {
-  payments: (year) => api.get(`/export/payments${year ? `?year=${year}` : ''}`)
+  payments: (year) => api.get(`/export/payments${year ? `?year=${year}` : ''}`),
+  paymentsExcel: (year) => api.get(`/export/payments/excel${year ? `?year=${year}` : ''}`, { responseType: 'blob' })
+};
+
+// Reminders
+export const remindersAPI = {
+  testSmtp: () => api.post('/reminders/test-smtp'),
+  send: () => api.post('/reminders/send'),
+  getPending: () => api.get('/reminders/pending')
 };
 
 export default api;
