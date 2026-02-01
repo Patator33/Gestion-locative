@@ -214,6 +214,37 @@ class Notification(BaseModel):
     related_id: Optional[str] = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
+# Document model for file uploads
+class DocumentBase(BaseModel):
+    name: str
+    document_type: str  # bail, etat_lieux_entree, etat_lieux_sortie, attestation, autre
+    related_type: str  # property, tenant, lease
+    related_id: str
+    notes: Optional[str] = None
+
+class DocumentCreate(DocumentBase):
+    pass
+
+class Document(DocumentBase):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    user_id: str
+    filename: str
+    file_size: int
+    mime_type: str
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+# Calendar event model
+class CalendarEvent(BaseModel):
+    id: str
+    title: str
+    date: str
+    type: str  # payment_due, lease_end, vacancy_start
+    related_id: Optional[str] = None
+    property_name: Optional[str] = None
+    tenant_name: Optional[str] = None
+    amount: Optional[float] = None
+
 # ==================== AUTH HELPERS ====================
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
