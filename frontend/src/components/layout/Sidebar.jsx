@@ -10,7 +10,9 @@ import {
   Bell, 
   Settings,
   LogOut,
-  Home
+  Home,
+  FolderOpen,
+  CalendarDays
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { cn } from '../../lib/utils';
@@ -18,10 +20,12 @@ import { Button } from '../ui/button';
 
 const navItems = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Tableau de bord' },
+  { to: '/calendar', icon: CalendarDays, label: 'Calendrier' },
   { to: '/properties', icon: Building2, label: 'Biens' },
   { to: '/tenants', icon: Users, label: 'Locataires' },
   { to: '/leases', icon: FileText, label: 'Baux' },
   { to: '/payments', icon: CreditCard, label: 'Paiements' },
+  { to: '/documents', icon: FolderOpen, label: 'Documents' },
   { to: '/vacancies', icon: Calendar, label: 'Vacances' },
   { to: '/notifications', icon: Bell, label: 'Notifications' },
   { to: '/settings', icon: Settings, label: 'Paramètres' },
