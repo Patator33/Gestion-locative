@@ -555,7 +555,10 @@ class RentMaestroAPITester:
             self.test_export_payments_excel,
             self.test_smtp_configuration,
             self.test_pending_payments,
-            self.test_send_reminders
+            self.test_send_reminders,
+            self.test_calendar_events,
+            self.test_documents_endpoints,
+            self.test_scheduler_status
         ]
         
         failed_tests = []
