@@ -498,7 +498,11 @@ class RentMaestroAPITester:
             self.test_get_vacancies,
             self.test_get_dashboard_stats,
             self.test_notification_settings,
-            self.test_get_notifications
+            self.test_get_notifications,
+            self.test_export_payments_excel,
+            self.test_smtp_configuration,
+            self.test_pending_payments,
+            self.test_send_reminders
         ]
         
         failed_tests = []
