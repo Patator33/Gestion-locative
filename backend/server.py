@@ -175,6 +175,12 @@ class NotificationSettingsBase(BaseModel):
     lease_ending_days: int = 60
     vacancy_alert: bool = True
     vacancy_alert_days: int = 30
+    # Email settings
+    email_reminders: bool = False
+    reminder_frequency: str = "weekly"  # daily, weekly, monthly
+    smtp_email: Optional[str] = None
+    smtp_password: Optional[str] = None
+    smtp_configured: bool = False
 
 class NotificationSettingsCreate(NotificationSettingsBase):
     pass
