@@ -1,15 +1,19 @@
-from fastapi import FastAPI, APIRouter
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, status
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.responses import StreamingResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
 from pathlib import Path
-from pydantic import BaseModel, Field, ConfigDict
-from typing import List
+from pydantic import BaseModel, Field, EmailStr, ConfigDict
+from typing import List, Optional
 import uuid
-from datetime import datetime, timezone
-
+from datetime import datetime, timezone, timedelta
+import jwt
+from passlib.context import CryptContext
+import io
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -19,52 +23,684 @@ mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ['DB_NAME']]
 
-# Create the main app without a prefix
-app = FastAPI()
+# JWT Configuration
+SECRET_KEY = os.environ.get('JWT_SECRET', 'rent-maestro-secret-key-2024')
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_HOURS = 24
+
+# Password hashing
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+# Security
+security = HTTPBearer()
+
+# Create the main app
+app = FastAPI(title="RentMaestro API")
 
 # Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
 
+# ==================== MODELS ====================
 
-# Define Models
-class StatusCheck(BaseModel):
-    model_config = ConfigDict(extra="ignore")  # Ignore MongoDB's _id field
-    
+class UserBase(BaseModel):
+    email: EmailStr
+    name: str
+
+class UserCreate(UserBase):
+    password: str
+
+class UserLogin(BaseModel):
+    email: EmailStr
+    password: str
+
+class User(UserBase):
+    model_config = ConfigDict(extra="ignore")
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    client_name: str
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
-class StatusCheckCreate(BaseModel):
-    client_name: str
+class Token(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    user: dict
 
-# Add your routes to the router instead of directly to app
+class PropertyBase(BaseModel):
+    name: str
+    address: str
+    city: str
+    postal_code: str
+    property_type: str  # apartment, house, studio, etc.
+    surface: float  # m²
+    rooms: int
+    rent_amount: float
+    charges: float = 0
+    description: Optional[str] = None
+    image_url: Optional[str] = None
+
+class PropertyCreate(PropertyBase):
+    pass
+
+class Property(PropertyBase):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    user_id: str
+    is_occupied: bool = False
+    current_tenant_id: Optional[str] = None
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+class TenantBase(BaseModel):
+    first_name: str
+    last_name: str
+    email: EmailStr
+    phone: str
+    birth_date: Optional[str] = None
+    profession: Optional[str] = None
+    emergency_contact: Optional[str] = None
+    notes: Optional[str] = None
+
+class TenantCreate(TenantBase):
+    pass
+
+class Tenant(TenantBase):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    user_id: str
+    current_property_id: Optional[str] = None
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+class LeaseBase(BaseModel):
+    property_id: str
+    tenant_id: str
+    start_date: str  # ISO format
+    end_date: Optional[str] = None
+    rent_amount: float
+    charges: float = 0
+    deposit: float
+    payment_day: int = 1  # Day of month for rent payment
+    notes: Optional[str] = None
+
+class LeaseCreate(LeaseBase):
+    pass
+
+class Lease(LeaseBase):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    user_id: str
+    is_active: bool = True
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+class PaymentBase(BaseModel):
+    lease_id: str
+    amount: float
+    payment_date: str  # ISO format
+    period_month: int  # 1-12
+    period_year: int
+    payment_method: str = "virement"  # virement, cheque, especes, cb
+    notes: Optional[str] = None
+
+class PaymentCreate(PaymentBase):
+    pass
+
+class Payment(PaymentBase):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    user_id: str
+    status: str = "paid"  # paid, pending, late
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+class VacancyBase(BaseModel):
+    property_id: str
+    start_date: str  # ISO format
+    end_date: Optional[str] = None
+    reason: Optional[str] = None
+
+class VacancyCreate(VacancyBase):
+    pass
+
+class Vacancy(VacancyBase):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    user_id: str
+    is_active: bool = True
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+class NotificationSettingsBase(BaseModel):
+    late_payment: bool = True
+    late_payment_days: int = 5
+    lease_ending: bool = True
+    lease_ending_days: int = 60
+    vacancy_alert: bool = True
+    vacancy_alert_days: int = 30
+
+class NotificationSettingsCreate(NotificationSettingsBase):
+    pass
+
+class NotificationSettings(NotificationSettingsBase):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    user_id: str
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+class Notification(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    user_id: str
+    type: str  # late_payment, lease_ending, vacancy
+    title: str
+    message: str
+    is_read: bool = False
+    related_id: Optional[str] = None
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+# ==================== AUTH HELPERS ====================
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    return pwd_context.verify(plain_password, hashed_password)
+
+def get_password_hash(password: str) -> str:
+    return pwd_context.hash(password)
+
+def create_access_token(data: dict) -> str:
+    to_encode = data.copy()
+    expire = datetime.now(timezone.utc) + timedelta(hours=ACCESS_TOKEN_EXPIRE_HOURS)
+    to_encode.update({"exp": expire})
+    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
+async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> dict:
+    try:
+        payload = jwt.decode(credentials.credentials, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id = payload.get("sub")
+        if user_id is None:
+            raise HTTPException(status_code=401, detail="Token invalide")
+        user = await db.users.find_one({"id": user_id}, {"_id": 0, "password": 0})
+        if user is None:
+            raise HTTPException(status_code=401, detail="Utilisateur non trouvé")
+        return user
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token expiré")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Token invalide")
+
+# ==================== AUTH ROUTES ====================
+
+@api_router.post("/auth/register", response_model=Token)
+async def register(user_data: UserCreate):
+    existing = await db.users.find_one({"email": user_data.email})
+    if existing:
+        raise HTTPException(status_code=400, detail="Email déjà utilisé")
+    
+    user = User(email=user_data.email, name=user_data.name)
+    user_dict = user.model_dump()
+    user_dict['password'] = get_password_hash(user_data.password)
+    user_dict['created_at'] = user_dict['created_at'].isoformat()
+    
+    await db.users.insert_one(user_dict)
+    
+    # Create default notification settings
+    notif_settings = NotificationSettings(user_id=user.id)
+    notif_dict = notif_settings.model_dump()
+    notif_dict['created_at'] = notif_dict['created_at'].isoformat()
+    await db.notification_settings.insert_one(notif_dict)
+    
+    token = create_access_token({"sub": user.id})
+    return Token(
+        access_token=token,
+        user={"id": user.id, "email": user.email, "name": user.name}
+    )
+
+@api_router.post("/auth/login", response_model=Token)
+async def login(credentials: UserLogin):
+    user = await db.users.find_one({"email": credentials.email}, {"_id": 0})
+    if not user or not verify_password(credentials.password, user['password']):
+        raise HTTPException(status_code=401, detail="Email ou mot de passe incorrect")
+    
+    token = create_access_token({"sub": user['id']})
+    return Token(
+        access_token=token,
+        user={"id": user['id'], "email": user['email'], "name": user['name']}
+    )
+
+@api_router.get("/auth/me")
+async def get_me(current_user: dict = Depends(get_current_user)):
+    return current_user
+
+# ==================== PROPERTIES ROUTES ====================
+
+@api_router.post("/properties", response_model=dict)
+async def create_property(property_data: PropertyCreate, current_user: dict = Depends(get_current_user)):
+    property_obj = Property(**property_data.model_dump(), user_id=current_user['id'])
+    doc = property_obj.model_dump()
+    doc['created_at'] = doc['created_at'].isoformat()
+    await db.properties.insert_one(doc)
+    return {"id": property_obj.id, "message": "Bien créé avec succès"}
+
+@api_router.get("/properties", response_model=List[dict])
+async def get_properties(current_user: dict = Depends(get_current_user)):
+    properties = await db.properties.find({"user_id": current_user['id']}, {"_id": 0}).to_list(1000)
+    return properties
+
+@api_router.get("/properties/{property_id}", response_model=dict)
+async def get_property(property_id: str, current_user: dict = Depends(get_current_user)):
+    property_doc = await db.properties.find_one(
+        {"id": property_id, "user_id": current_user['id']}, {"_id": 0}
+    )
+    if not property_doc:
+        raise HTTPException(status_code=404, detail="Bien non trouvé")
+    return property_doc
+
+@api_router.put("/properties/{property_id}", response_model=dict)
+async def update_property(property_id: str, property_data: PropertyCreate, current_user: dict = Depends(get_current_user)):
+    result = await db.properties.update_one(
+        {"id": property_id, "user_id": current_user['id']},
+        {"$set": property_data.model_dump()}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Bien non trouvé")
+    return {"message": "Bien mis à jour avec succès"}
+
+@api_router.delete("/properties/{property_id}")
+async def delete_property(property_id: str, current_user: dict = Depends(get_current_user)):
+    result = await db.properties.delete_one({"id": property_id, "user_id": current_user['id']})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Bien non trouvé")
+    return {"message": "Bien supprimé avec succès"}
+
+# ==================== TENANTS ROUTES ====================
+
+@api_router.post("/tenants", response_model=dict)
+async def create_tenant(tenant_data: TenantCreate, current_user: dict = Depends(get_current_user)):
+    tenant_obj = Tenant(**tenant_data.model_dump(), user_id=current_user['id'])
+    doc = tenant_obj.model_dump()
+    doc['created_at'] = doc['created_at'].isoformat()
+    await db.tenants.insert_one(doc)
+    return {"id": tenant_obj.id, "message": "Locataire créé avec succès"}
+
+@api_router.get("/tenants", response_model=List[dict])
+async def get_tenants(current_user: dict = Depends(get_current_user)):
+    tenants = await db.tenants.find({"user_id": current_user['id']}, {"_id": 0}).to_list(1000)
+    return tenants
+
+@api_router.get("/tenants/{tenant_id}", response_model=dict)
+async def get_tenant(tenant_id: str, current_user: dict = Depends(get_current_user)):
+    tenant_doc = await db.tenants.find_one(
+        {"id": tenant_id, "user_id": current_user['id']}, {"_id": 0}
+    )
+    if not tenant_doc:
+        raise HTTPException(status_code=404, detail="Locataire non trouvé")
+    return tenant_doc
+
+@api_router.put("/tenants/{tenant_id}", response_model=dict)
+async def update_tenant(tenant_id: str, tenant_data: TenantCreate, current_user: dict = Depends(get_current_user)):
+    result = await db.tenants.update_one(
+        {"id": tenant_id, "user_id": current_user['id']},
+        {"$set": tenant_data.model_dump()}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Locataire non trouvé")
+    return {"message": "Locataire mis à jour avec succès"}
+
+@api_router.delete("/tenants/{tenant_id}")
+async def delete_tenant(tenant_id: str, current_user: dict = Depends(get_current_user)):
+    result = await db.tenants.delete_one({"id": tenant_id, "user_id": current_user['id']})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Locataire non trouvé")
+    return {"message": "Locataire supprimé avec succès"}
+
+# ==================== LEASES ROUTES ====================
+
+@api_router.post("/leases", response_model=dict)
+async def create_lease(lease_data: LeaseCreate, current_user: dict = Depends(get_current_user)):
+    # Verify property and tenant exist
+    property_doc = await db.properties.find_one({"id": lease_data.property_id, "user_id": current_user['id']})
+    if not property_doc:
+        raise HTTPException(status_code=404, detail="Bien non trouvé")
+    
+    tenant_doc = await db.tenants.find_one({"id": lease_data.tenant_id, "user_id": current_user['id']})
+    if not tenant_doc:
+        raise HTTPException(status_code=404, detail="Locataire non trouvé")
+    
+    # Create lease
+    lease_obj = Lease(**lease_data.model_dump(), user_id=current_user['id'])
+    doc = lease_obj.model_dump()
+    doc['created_at'] = doc['created_at'].isoformat()
+    await db.leases.insert_one(doc)
+    
+    # Update property status
+    await db.properties.update_one(
+        {"id": lease_data.property_id},
+        {"$set": {"is_occupied": True, "current_tenant_id": lease_data.tenant_id}}
+    )
+    
+    # Update tenant current property
+    await db.tenants.update_one(
+        {"id": lease_data.tenant_id},
+        {"$set": {"current_property_id": lease_data.property_id}}
+    )
+    
+    # End any active vacancy
+    await db.vacancies.update_many(
+        {"property_id": lease_data.property_id, "is_active": True},
+        {"$set": {"is_active": False, "end_date": lease_data.start_date}}
+    )
+    
+    return {"id": lease_obj.id, "message": "Bail créé avec succès"}
+
+@api_router.get("/leases", response_model=List[dict])
+async def get_leases(current_user: dict = Depends(get_current_user)):
+    leases = await db.leases.find({"user_id": current_user['id']}, {"_id": 0}).to_list(1000)
+    # Enrich with property and tenant info
+    for lease in leases:
+        property_doc = await db.properties.find_one({"id": lease['property_id']}, {"_id": 0, "name": 1, "address": 1})
+        tenant_doc = await db.tenants.find_one({"id": lease['tenant_id']}, {"_id": 0, "first_name": 1, "last_name": 1})
+        lease['property'] = property_doc
+        lease['tenant'] = tenant_doc
+    return leases
+
+@api_router.get("/leases/{lease_id}", response_model=dict)
+async def get_lease(lease_id: str, current_user: dict = Depends(get_current_user)):
+    lease_doc = await db.leases.find_one(
+        {"id": lease_id, "user_id": current_user['id']}, {"_id": 0}
+    )
+    if not lease_doc:
+        raise HTTPException(status_code=404, detail="Bail non trouvé")
+    return lease_doc
+
+@api_router.put("/leases/{lease_id}/terminate")
+async def terminate_lease(lease_id: str, end_date: str, current_user: dict = Depends(get_current_user)):
+    lease_doc = await db.leases.find_one({"id": lease_id, "user_id": current_user['id']})
+    if not lease_doc:
+        raise HTTPException(status_code=404, detail="Bail non trouvé")
+    
+    # Update lease
+    await db.leases.update_one(
+        {"id": lease_id},
+        {"$set": {"is_active": False, "end_date": end_date}}
+    )
+    
+    # Update property
+    await db.properties.update_one(
+        {"id": lease_doc['property_id']},
+        {"$set": {"is_occupied": False, "current_tenant_id": None}}
+    )
+    
+    # Update tenant
+    await db.tenants.update_one(
+        {"id": lease_doc['tenant_id']},
+        {"$set": {"current_property_id": None}}
+    )
+    
+    # Create vacancy
+    vacancy_obj = Vacancy(
+        property_id=lease_doc['property_id'],
+        start_date=end_date,
+        user_id=current_user['id'],
+        reason="Fin de bail"
+    )
+    doc = vacancy_obj.model_dump()
+    doc['created_at'] = doc['created_at'].isoformat()
+    await db.vacancies.insert_one(doc)
+    
+    return {"message": "Bail résilié avec succès"}
+
+# ==================== PAYMENTS ROUTES ====================
+
+@api_router.post("/payments", response_model=dict)
+async def create_payment(payment_data: PaymentCreate, current_user: dict = Depends(get_current_user)):
+    # Verify lease exists
+    lease_doc = await db.leases.find_one({"id": payment_data.lease_id, "user_id": current_user['id']})
+    if not lease_doc:
+        raise HTTPException(status_code=404, detail="Bail non trouvé")
+    
+    payment_obj = Payment(**payment_data.model_dump(), user_id=current_user['id'])
+    doc = payment_obj.model_dump()
+    doc['created_at'] = doc['created_at'].isoformat()
+    await db.payments.insert_one(doc)
+    return {"id": payment_obj.id, "message": "Paiement enregistré avec succès"}
+
+@api_router.get("/payments", response_model=List[dict])
+async def get_payments(current_user: dict = Depends(get_current_user)):
+    payments = await db.payments.find({"user_id": current_user['id']}, {"_id": 0}).to_list(1000)
+    # Enrich with lease info
+    for payment in payments:
+        lease_doc = await db.leases.find_one({"id": payment['lease_id']}, {"_id": 0})
+        if lease_doc:
+            property_doc = await db.properties.find_one({"id": lease_doc['property_id']}, {"_id": 0, "name": 1})
+            tenant_doc = await db.tenants.find_one({"id": lease_doc['tenant_id']}, {"_id": 0, "first_name": 1, "last_name": 1})
+            payment['property'] = property_doc
+            payment['tenant'] = tenant_doc
+    return payments
+
+@api_router.get("/payments/lease/{lease_id}", response_model=List[dict])
+async def get_lease_payments(lease_id: str, current_user: dict = Depends(get_current_user)):
+    payments = await db.payments.find(
+        {"lease_id": lease_id, "user_id": current_user['id']}, {"_id": 0}
+    ).to_list(1000)
+    return payments
+
+@api_router.delete("/payments/{payment_id}")
+async def delete_payment(payment_id: str, current_user: dict = Depends(get_current_user)):
+    result = await db.payments.delete_one({"id": payment_id, "user_id": current_user['id']})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Paiement non trouvé")
+    return {"message": "Paiement supprimé avec succès"}
+
+# ==================== VACANCIES ROUTES ====================
+
+@api_router.post("/vacancies", response_model=dict)
+async def create_vacancy(vacancy_data: VacancyCreate, current_user: dict = Depends(get_current_user)):
+    vacancy_obj = Vacancy(**vacancy_data.model_dump(), user_id=current_user['id'])
+    doc = vacancy_obj.model_dump()
+    doc['created_at'] = doc['created_at'].isoformat()
+    await db.vacancies.insert_one(doc)
+    return {"id": vacancy_obj.id, "message": "Vacance créée avec succès"}
+
+@api_router.get("/vacancies", response_model=List[dict])
+async def get_vacancies(current_user: dict = Depends(get_current_user)):
+    vacancies = await db.vacancies.find({"user_id": current_user['id']}, {"_id": 0}).to_list(1000)
+    # Enrich with property info
+    for vacancy in vacancies:
+        property_doc = await db.properties.find_one({"id": vacancy['property_id']}, {"_id": 0, "name": 1, "address": 1})
+        vacancy['property'] = property_doc
+    return vacancies
+
+@api_router.put("/vacancies/{vacancy_id}/end")
+async def end_vacancy(vacancy_id: str, end_date: str, current_user: dict = Depends(get_current_user)):
+    result = await db.vacancies.update_one(
+        {"id": vacancy_id, "user_id": current_user['id']},
+        {"$set": {"is_active": False, "end_date": end_date}}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Vacance non trouvée")
+    return {"message": "Vacance terminée avec succès"}
+
+# ==================== NOTIFICATIONS ROUTES ====================
+
+@api_router.get("/notifications/settings", response_model=dict)
+async def get_notification_settings(current_user: dict = Depends(get_current_user)):
+    settings = await db.notification_settings.find_one(
+        {"user_id": current_user['id']}, {"_id": 0}
+    )
+    if not settings:
+        # Create default settings
+        notif_settings = NotificationSettings(user_id=current_user['id'])
+        doc = notif_settings.model_dump()
+        doc['created_at'] = doc['created_at'].isoformat()
+        await db.notification_settings.insert_one(doc)
+        return doc
+    return settings
+
+@api_router.put("/notifications/settings", response_model=dict)
+async def update_notification_settings(settings_data: NotificationSettingsCreate, current_user: dict = Depends(get_current_user)):
+    result = await db.notification_settings.update_one(
+        {"user_id": current_user['id']},
+        {"$set": settings_data.model_dump()},
+        upsert=True
+    )
+    return {"message": "Paramètres mis à jour avec succès"}
+
+@api_router.get("/notifications", response_model=List[dict])
+async def get_notifications(current_user: dict = Depends(get_current_user)):
+    notifications = await db.notifications.find(
+        {"user_id": current_user['id']}, {"_id": 0}
+    ).sort("created_at", -1).to_list(100)
+    return notifications
+
+@api_router.put("/notifications/{notification_id}/read")
+async def mark_notification_read(notification_id: str, current_user: dict = Depends(get_current_user)):
+    result = await db.notifications.update_one(
+        {"id": notification_id, "user_id": current_user['id']},
+        {"$set": {"is_read": True}}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Notification non trouvée")
+    return {"message": "Notification marquée comme lue"}
+
+@api_router.put("/notifications/read-all")
+async def mark_all_notifications_read(current_user: dict = Depends(get_current_user)):
+    await db.notifications.update_many(
+        {"user_id": current_user['id'], "is_read": False},
+        {"$set": {"is_read": True}}
+    )
+    return {"message": "Toutes les notifications marquées comme lues"}
+
+# ==================== DASHBOARD ROUTES ====================
+
+@api_router.get("/dashboard/stats")
+async def get_dashboard_stats(current_user: dict = Depends(get_current_user)):
+    user_id = current_user['id']
+    
+    # Properties stats
+    total_properties = await db.properties.count_documents({"user_id": user_id})
+    occupied_properties = await db.properties.count_documents({"user_id": user_id, "is_occupied": True})
+    
+    # Tenants count
+    total_tenants = await db.tenants.count_documents({"user_id": user_id})
+    
+    # Active leases
+    active_leases = await db.leases.count_documents({"user_id": user_id, "is_active": True})
+    
+    # Calculate total expected monthly rent
+    leases = await db.leases.find({"user_id": user_id, "is_active": True}, {"_id": 0}).to_list(1000)
+    total_monthly_rent = sum(lease.get('rent_amount', 0) + lease.get('charges', 0) for lease in leases)
+    
+    # Current month payments
+    now = datetime.now(timezone.utc)
+    current_month_payments = await db.payments.find({
+        "user_id": user_id,
+        "period_month": now.month,
+        "period_year": now.year
+    }, {"_id": 0}).to_list(1000)
+    total_collected = sum(p.get('amount', 0) for p in current_month_payments)
+    
+    # Active vacancies
+    active_vacancies = await db.vacancies.count_documents({"user_id": user_id, "is_active": True})
+    
+    # Occupancy rate
+    occupancy_rate = (occupied_properties / total_properties * 100) if total_properties > 0 else 0
+    
+    # Recent payments (last 6 months)
+    six_months_ago = now - timedelta(days=180)
+    recent_payments = await db.payments.find({
+        "user_id": user_id
+    }, {"_id": 0}).to_list(1000)
+    
+    # Group by month
+    monthly_revenue = {}
+    for payment in recent_payments:
+        key = f"{payment['period_year']}-{payment['period_month']:02d}"
+        if key not in monthly_revenue:
+            monthly_revenue[key] = 0
+        monthly_revenue[key] += payment.get('amount', 0)
+    
+    # Sort and get last 6 months
+    sorted_months = sorted(monthly_revenue.items(), reverse=True)[:6]
+    revenue_chart = [{"month": m[0], "amount": m[1]} for m in reversed(sorted_months)]
+    
+    # Unread notifications count
+    unread_notifications = await db.notifications.count_documents({"user_id": user_id, "is_read": False})
+    
+    return {
+        "total_properties": total_properties,
+        "occupied_properties": occupied_properties,
+        "vacant_properties": total_properties - occupied_properties,
+        "total_tenants": total_tenants,
+        "active_leases": active_leases,
+        "total_monthly_rent": total_monthly_rent,
+        "total_collected": total_collected,
+        "pending_amount": total_monthly_rent - total_collected,
+        "active_vacancies": active_vacancies,
+        "occupancy_rate": round(occupancy_rate, 1),
+        "revenue_chart": revenue_chart,
+        "unread_notifications": unread_notifications
+    }
+
+# ==================== RECEIPT (QUITTANCE) GENERATION ====================
+
+@api_router.get("/receipts/{payment_id}")
+async def generate_receipt(payment_id: str, current_user: dict = Depends(get_current_user)):
+    payment = await db.payments.find_one({"id": payment_id, "user_id": current_user['id']}, {"_id": 0})
+    if not payment:
+        raise HTTPException(status_code=404, detail="Paiement non trouvé")
+    
+    lease = await db.leases.find_one({"id": payment['lease_id']}, {"_id": 0})
+    if not lease:
+        raise HTTPException(status_code=404, detail="Bail non trouvé")
+    
+    property_doc = await db.properties.find_one({"id": lease['property_id']}, {"_id": 0})
+    tenant = await db.tenants.find_one({"id": lease['tenant_id']}, {"_id": 0})
+    user = await db.users.find_one({"id": current_user['id']}, {"_id": 0, "password": 0})
+    
+    months_fr = ["", "Janvier", "Février", "Mars", "Avril", "Mai", "Juin", 
+                 "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"]
+    
+    return {
+        "receipt": {
+            "id": payment_id,
+            "landlord_name": user['name'],
+            "tenant_name": f"{tenant['first_name']} {tenant['last_name']}",
+            "property_address": f"{property_doc['address']}, {property_doc['postal_code']} {property_doc['city']}",
+            "property_name": property_doc['name'],
+            "period": f"{months_fr[payment['period_month']]} {payment['period_year']}",
+            "rent_amount": lease['rent_amount'],
+            "charges": lease['charges'],
+            "total_amount": payment['amount'],
+            "payment_date": payment['payment_date'],
+            "payment_method": payment['payment_method']
+        }
+    }
+
+# ==================== EXPORT ROUTES ====================
+
+@api_router.get("/export/payments")
+async def export_payments(year: int = None, current_user: dict = Depends(get_current_user)):
+    query = {"user_id": current_user['id']}
+    if year:
+        query["period_year"] = year
+    
+    payments = await db.payments.find(query, {"_id": 0}).to_list(10000)
+    
+    # Enrich data
+    export_data = []
+    for payment in payments:
+        lease = await db.leases.find_one({"id": payment['lease_id']}, {"_id": 0})
+        if lease:
+            property_doc = await db.properties.find_one({"id": lease['property_id']}, {"_id": 0})
+            tenant = await db.tenants.find_one({"id": lease['tenant_id']}, {"_id": 0})
+            export_data.append({
+                "date": payment['payment_date'],
+                "bien": property_doc['name'] if property_doc else "",
+                "locataire": f"{tenant['first_name']} {tenant['last_name']}" if tenant else "",
+                "periode": f"{payment['period_month']}/{payment['period_year']}",
+                "montant": payment['amount'],
+                "methode": payment['payment_method']
+            })
+    
+    return {"payments": export_data}
+
+# ==================== HEALTH CHECK ====================
+
 @api_router.get("/")
 async def root():
-    return {"message": "Hello World"}
-
-@api_router.post("/status", response_model=StatusCheck)
-async def create_status_check(input: StatusCheckCreate):
-    status_dict = input.model_dump()
-    status_obj = StatusCheck(**status_dict)
-    
-    # Convert to dict and serialize datetime to ISO string for MongoDB
-    doc = status_obj.model_dump()
-    doc['timestamp'] = doc['timestamp'].isoformat()
-    
-    _ = await db.status_checks.insert_one(doc)
-    return status_obj
-
-@api_router.get("/status", response_model=List[StatusCheck])
-async def get_status_checks():
-    # Exclude MongoDB's _id field from the query results
-    status_checks = await db.status_checks.find({}, {"_id": 0}).to_list(1000)
-    
-    # Convert ISO string timestamps back to datetime objects
-    for check in status_checks:
-        if isinstance(check['timestamp'], str):
-            check['timestamp'] = datetime.fromisoformat(check['timestamp'])
-    
-    return status_checks
+    return {"message": "RentMaestro API v1.0", "status": "healthy"}
 
 # Include the router in the main app
 app.include_router(api_router)
