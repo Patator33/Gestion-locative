@@ -36,9 +36,14 @@ const Payments = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [receiptDialogOpen, setReceiptDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [pendingDialogOpen, setPendingDialogOpen] = useState(false);
   const [paymentToDelete, setPaymentToDelete] = useState(null);
   const [receiptData, setReceiptData] = useState(null);
+  const [pendingPayments, setPendingPayments] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [exportYear, setExportYear] = useState(new Date().getFullYear().toString());
+  const [exporting, setExporting] = useState(false);
+  const [sendingReminders, setSendingReminders] = useState(false);
   const [formData, setFormData] = useState({
     lease_id: '',
     amount: '',
