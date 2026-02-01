@@ -10,6 +10,8 @@ Application complète de gestion de parc locatif permettant aux propriétaires e
 - **Authentification**: JWT (JSON Web Tokens)
 - **Export**: OpenPyXL pour fichiers Excel
 - **Emails**: Gmail SMTP
+- **Scheduler**: APScheduler pour tâches automatisées
+- **Upload**: python-multipart pour fichiers
 
 ## Fonctionnalités Implémentées
 
@@ -45,7 +47,7 @@ Application complète de gestion de parc locatif permettant aux propriétaires e
 - [x] Différentes méthodes (virement, chèque, CB, espèces)
 - [x] Suivi par période (mois/année)
 - [x] Suppression de paiements
-- [x] **Export Excel** avec filtre par année
+- [x] Export Excel avec filtre par année
 
 ### Quittances de Loyer
 - [x] Génération automatique
@@ -72,17 +74,35 @@ Application complète de gestion de parc locatif permettant aux propriétaires e
 - [x] Alertes vacances prolongées
 - [x] Marquage lu/non lu
 
-### Rappels par Email (Gmail SMTP) - NOUVEAU
+### Rappels par Email (Gmail SMTP)
 - [x] Configuration SMTP dans les paramètres
 - [x] Test de connexion SMTP
 - [x] Envoi de rappels manuels
 - [x] Fréquence configurable (quotidien, hebdomadaire, mensuel)
-- [x] Liste des paiements en attente
+- [x] **Rappels automatiques** (APScheduler - 9h quotidien)
 
-### Mode Sombre - NOUVEAU
+### Mode Sombre
 - [x] Toggle dans les paramètres
 - [x] Persistance via localStorage
 - [x] Design adapté pour tous les composants
+
+### Gestion des Documents - NOUVEAU
+- [x] Upload de fichiers (PDF, DOC, DOCX, JPG, PNG)
+- [x] Limite 10MB par fichier
+- [x] Types de documents (bail, état des lieux, attestation, etc.)
+- [x] Association à un bien, locataire ou bail
+- [x] Téléchargement des fichiers
+- [x] Suppression de documents
+- [x] Recherche et filtrage
+
+### Calendrier Interactif - NOUVEAU
+- [x] Vue mensuelle avec navigation
+- [x] Événements de loyers (dus/payés)
+- [x] Fins de bail
+- [x] Vacances locatives
+- [x] Statistiques du mois (attendu, perçu, en attente)
+- [x] Sélection de jour avec détails
+- [x] Légende des couleurs
 
 ## Persona Utilisateur
 **Propriétaire/Gestionnaire Immobilier**
@@ -91,17 +111,13 @@ Application complète de gestion de parc locatif permettant aux propriétaires e
 - Veut générer des quittances facilement
 - Souhaite être alerté des événements importants
 - Veut envoyer des rappels automatiques
+- Nécessite de stocker les documents légaux
 
 ## Backlog - Fonctionnalités Futures
 
-### P1 - Haute Priorité
-- [ ] Automatisation complète des rappels (cron job)
-- [ ] Historique des modifications
-
 ### P2 - Moyenne Priorité
-- [ ] Gestion des documents (scan bail, état des lieux)
-- [ ] Calendrier des échéances
 - [ ] Multi-utilisateurs (gestion d'équipe)
+- [ ] Historique des modifications
 
 ### P3 - Basse Priorité
 - [ ] Application mobile native
@@ -137,6 +153,16 @@ Application complète de gestion de parc locatif permettant aux propriétaires e
 - GET/POST /api/vacancies
 - PUT /api/vacancies/{id}/end
 
+### Documents
+- GET /api/documents
+- GET /api/documents/{id}
+- POST /api/documents/upload
+- GET /api/documents/{id}/download
+- DELETE /api/documents/{id}
+
+### Calendar
+- GET /api/calendar/events?month=X&year=Y
+
 ### Export
 - GET /api/export/payments
 - GET /api/export/payments/excel
@@ -152,6 +178,13 @@ Application complète de gestion de parc locatif permettant aux propriétaires e
 - GET /api/notifications
 - GET/PUT /api/notifications/settings
 
+## Tâches Automatisées
+- **Rappels de loyers**: Tous les jours à 9h00 (configurable)
+  - Vérifie les loyers impayés du mois courant
+  - Envoie des emails aux locataires concernés
+  - Respecte la fréquence configurée (quotidien/hebdomadaire/mensuel)
+
 ## Dates
 - Création initiale: Février 2026
 - Ajout Export Excel + Rappels Email + Mode Sombre: Février 2026
+- Ajout Gestion Documents + Calendrier + Automatisation: Février 2026
