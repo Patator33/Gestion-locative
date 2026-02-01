@@ -393,6 +393,87 @@ class RentMaestroAPITester:
         )
         return success
 
+    def test_export_payments_excel(self):
+        """Test Excel export of payments"""
+        # Test export for current year
+        current_year = datetime.now().year
+        success1, response = self.run_test(
+            f"Export Payments Excel ({current_year})",
+            "GET",
+            f"export/payments/excel?year={current_year}",
+            200
+        )
+        
+        # Test export for all years
+        success2, response = self.run_test(
+            "Export Payments Excel (All Years)",
+            "GET",
+            "export/payments/excel",
+            200
+        )
+        
+        return success1 and success2
+
+    def test_smtp_configuration(self):
+        """Test SMTP configuration endpoints"""
+        # Update notification settings with SMTP config
+        smtp_settings = {
+            "late_payment": True,
+            "late_payment_days": 5,
+            "lease_ending": True,
+            "lease_ending_days": 60,
+            "vacancy_alert": True,
+            "vacancy_alert_days": 30,
+            "email_reminders": True,
+            "reminder_frequency": "weekly",
+            "smtp_email": "test@gmail.com",
+            "smtp_password": "test_password",
+            "smtp_configured": False
+        }
+        
+        success1, response = self.run_test(
+            "Update SMTP Settings",
+            "PUT",
+            "notifications/settings",
+            200,
+            data=smtp_settings
+        )
+        
+        # Note: We can't test actual SMTP connection without real credentials
+        # But we can test that the endpoint exists and handles the request
+        success2, response = self.run_test(
+            "Test SMTP Connection (Expected to fail)",
+            "POST",
+            "reminders/test-smtp",
+            400  # Expected to fail with invalid credentials
+        )
+        
+        return success1 and success2
+
+    def test_pending_payments(self):
+        """Test pending payments endpoint"""
+        success, response = self.run_test(
+            "Get Pending Payments",
+            "GET",
+            "reminders/pending",
+            200
+        )
+        
+        if success and isinstance(response, dict):
+            print(f"   Found {response.get('count', 0)} pending payments")
+        
+        return success
+
+    def test_send_reminders(self):
+        """Test send reminders endpoint (expected to fail without SMTP config)"""
+        success, response = self.run_test(
+            "Send Payment Reminders (Expected to fail)",
+            "POST",
+            "reminders/send",
+            400  # Expected to fail without proper SMTP configuration
+        )
+        return success
+
     def run_all_tests(self):
         """Run all API tests in sequence"""
         print("🚀 Starting RentMaestro API Tests")
