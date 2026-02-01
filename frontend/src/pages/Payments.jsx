@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { paymentsAPI, leasesAPI, receiptsAPI } from '../lib/api';
+import { paymentsAPI, leasesAPI, receiptsAPI, exportAPI, remindersAPI } from '../lib/api';
 import { formatCurrency, formatDate, PAYMENT_METHODS, MONTHS_FR } from '../lib/utils';
 import { Card, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
@@ -22,7 +22,11 @@ import {
   FileText,
   Trash2,
   Search,
-  Download
+  Download,
+  FileSpreadsheet,
+  Send,
+  Loader2,
+  AlertTriangle
 } from 'lucide-react';
 
 const Payments = () => {
