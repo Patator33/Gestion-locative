@@ -707,6 +707,292 @@ async def export_payments(year: int = None, current_user: dict = Depends(get_cur
     
     return {"payments": export_data}
 
+@api_router.get("/export/payments/excel")
+async def export_payments_excel(year: int = None, current_user: dict = Depends(get_current_user)):
+    """Export payments to Excel file"""
+    query = {"user_id": current_user['id']}
+    if year:
+        query["period_year"] = year
+    
+    payments = await db.payments.find(query, {"_id": 0}).sort("payment_date", -1).to_list(10000)
+    
+    # Create Excel workbook
+    wb = Workbook()
+    ws = wb.active
+    ws.title = f"Paiements {year if year else 'Tous'}"
+    
+    # Styles
+    header_font = Font(bold=True, color="FFFFFF")
+    header_fill = PatternFill(start_color="064E3B", end_color="064E3B", fill_type="solid")
+    border = Border(
+        left=Side(style='thin'),
+        right=Side(style='thin'),
+        top=Side(style='thin'),
+        bottom=Side(style='thin')
+    )
+    
+    # Headers
+    headers = ["Date", "Bien", "Locataire", "Période", "Montant (€)", "Méthode de paiement"]
+    for col, header in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col, value=header)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = Alignment(horizontal="center")
+        cell.border = border
+    
+    # Data rows
+    total_amount = 0
+    row = 2
+    for payment in payments:
+        lease = await db.leases.find_one({"id": payment['lease_id']}, {"_id": 0})
+        if lease:
+            property_doc = await db.properties.find_one({"id": lease['property_id']}, {"_id": 0})
+            tenant = await db.tenants.find_one({"id": lease['tenant_id']}, {"_id": 0})
+            
+            months_fr = ["", "Janvier", "Février", "Mars", "Avril", "Mai", "Juin", 
+                        "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"]
+            
+            data = [
+                payment['payment_date'],
+                property_doc['name'] if property_doc else "",
+                f"{tenant['first_name']} {tenant['last_name']}" if tenant else "",
+                f"{months_fr[payment['period_month']]} {payment['period_year']}",
+                payment['amount'],
+                payment['payment_method']
+            ]
+            
+            for col, value in enumerate(data, 1):
+                cell = ws.cell(row=row, column=col, value=value)
+                cell.border = border
+                if col == 5:  # Amount column
+                    cell.number_format = '#,##0.00 €'
+                    total_amount += value
+            row += 1
+    
+    # Total row
+    ws.cell(row=row + 1, column=4, value="TOTAL").font = Font(bold=True)
+    total_cell = ws.cell(row=row + 1, column=5, value=total_amount)
+    total_cell.font = Font(bold=True)
+    total_cell.number_format = '#,##0.00 €'
+    
+    # Adjust column widths
+    ws.column_dimensions['A'].width = 12
+    ws.column_dimensions['B'].width = 25
+    ws.column_dimensions['C'].width = 20
+    ws.column_dimensions['D'].width = 18
+    ws.column_dimensions['E'].width = 15
+    ws.column_dimensions['F'].width = 20
+    
+    # Save to bytes
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+    
+    filename = f"paiements_{year if year else 'tous'}_{datetime.now().strftime('%Y%m%d')}.xlsx"
+    
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
+# ==================== EMAIL REMINDER ROUTES ====================
+
+def send_email_smtp(smtp_email: str, smtp_password: str, to_email: str, subject: str, html_content: str):
+    """Send email using Gmail SMTP"""
+    try:
+        msg = MIMEMultipart('alternative')
+        msg['Subject'] = subject
+        msg['From'] = smtp_email
+        msg['To'] = to_email
+        
+        html_part = MIMEText(html_content, 'html')
+        msg.attach(html_part)
+        
+        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
+            server.login(smtp_email, smtp_password)
+            server.sendmail(smtp_email, to_email, msg.as_string())
+        
+        return True
+    except Exception as e:
+        logger.error(f"Failed to send email: {e}")
+        return False
+
+@api_router.post("/reminders/test-smtp")
+async def test_smtp_connection(current_user: dict = Depends(get_current_user)):
+    """Test SMTP connection with saved settings"""
+    settings = await db.notification_settings.find_one(
+        {"user_id": current_user['id']}, {"_id": 0}
+    )
+    
+    if not settings or not settings.get('smtp_email') or not settings.get('smtp_password'):
+        raise HTTPException(status_code=400, detail="Configuration SMTP manquante")
+    
+    # Try to send a test email
+    html_content = """
+    <html>
+    <body style="font-family: Arial, sans-serif; padding: 20px;">
+        <h2 style="color: #064E3B;">Test de connexion RentMaestro</h2>
+        <p>Si vous recevez cet email, votre configuration SMTP est correcte !</p>
+        <p style="color: #78716C; font-size: 12px;">Email envoyé depuis RentMaestro</p>
+    </body>
+    </html>
+    """
+    
+    success = send_email_smtp(
+        settings['smtp_email'],
+        settings['smtp_password'],
+        settings['smtp_email'],
+        "Test RentMaestro - Configuration SMTP",
+        html_content
+    )
+    
+    if success:
+        # Update smtp_configured flag
+        await db.notification_settings.update_one(
+            {"user_id": current_user['id']},
+            {"$set": {"smtp_configured": True}}
+        )
+        return {"message": "Email de test envoyé avec succès", "success": True}
+    else:
+        raise HTTPException(status_code=400, detail="Échec de l'envoi. Vérifiez vos identifiants.")
+
+@api_router.post("/reminders/send")
+async def send_payment_reminders(current_user: dict = Depends(get_current_user)):
+    """Send payment reminders for unpaid rents"""
+    settings = await db.notification_settings.find_one(
+        {"user_id": current_user['id']}, {"_id": 0}
+    )
+    
+    if not settings or not settings.get('smtp_configured'):
+        raise HTTPException(status_code=400, detail="Configuration SMTP non validée")
+    
+    # Get active leases
+    leases = await db.leases.find({"user_id": current_user['id'], "is_active": True}, {"_id": 0}).to_list(1000)
+    
+    now = datetime.now(timezone.utc)
+    current_month = now.month
+    current_year = now.year
+    
+    emails_sent = 0
+    errors = []
+    
+    for lease in leases:
+        # Check if payment exists for current month
+        payment = await db.payments.find_one({
+            "lease_id": lease['id'],
+            "period_month": current_month,
+            "period_year": current_year
+        })
+        
+        if not payment:
+            # No payment for this month - send reminder
+            tenant = await db.tenants.find_one({"id": lease['tenant_id']}, {"_id": 0})
+            property_doc = await db.properties.find_one({"id": lease['property_id']}, {"_id": 0})
+            user = await db.users.find_one({"id": current_user['id']}, {"_id": 0, "password": 0})
+            
+            if tenant and tenant.get('email'):
+                months_fr = ["", "Janvier", "Février", "Mars", "Avril", "Mai", "Juin", 
+                            "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"]
+                
+                total_rent = lease['rent_amount'] + lease.get('charges', 0)
+                
+                html_content = f"""
+                <html>
+                <body style="font-family: Arial, sans-serif; padding: 20px; max-width: 600px; margin: 0 auto;">
+                    <div style="background: #064E3B; color: white; padding: 20px; border-radius: 8px 8px 0 0;">
+                        <h1 style="margin: 0;">Rappel de loyer</h1>
+                    </div>
+                    <div style="border: 1px solid #E7E5E4; border-top: none; padding: 30px; border-radius: 0 0 8px 8px;">
+                        <p>Bonjour {tenant['first_name']} {tenant['last_name']},</p>
+                        
+                        <p>Nous vous rappelons que le loyer pour le mois de <strong>{months_fr[current_month]} {current_year}</strong> 
+                        n'a pas encore été enregistré pour le bien :</p>
+                        
+                        <div style="background: #F5F5F4; padding: 15px; border-radius: 8px; margin: 20px 0;">
+                            <p style="margin: 0;"><strong>{property_doc['name']}</strong></p>
+                            <p style="margin: 5px 0 0 0; color: #78716C;">{property_doc['address']}, {property_doc['postal_code']} {property_doc['city']}</p>
+                        </div>
+                        
+                        <p><strong>Montant attendu :</strong> {total_rent:.2f} €</p>
+                        <p style="font-size: 14px; color: #78716C;">
+                            (Loyer : {lease['rent_amount']:.2f} € + Charges : {lease.get('charges', 0):.2f} €)
+                        </p>
+                        
+                        <p>Merci de procéder au règlement dans les meilleurs délais.</p>
+                        
+                        <p>Cordialement,<br><strong>{user['name']}</strong></p>
+                    </div>
+                    <p style="color: #78716C; font-size: 11px; text-align: center; margin-top: 20px;">
+                        Cet email a été envoyé automatiquement via RentMaestro
+                    </p>
+                </body>
+                </html>
+                """
+                
+                success = send_email_smtp(
+                    settings['smtp_email'],
+                    settings['smtp_password'],
+                    tenant['email'],
+                    f"Rappel de loyer - {months_fr[current_month]} {current_year}",
+                    html_content
+                )
+                
+                if success:
+                    emails_sent += 1
+                    # Create notification
+                    notif = Notification(
+                        user_id=current_user['id'],
+                        type="reminder_sent",
+                        title="Rappel envoyé",
+                        message=f"Rappel de loyer envoyé à {tenant['first_name']} {tenant['last_name']} pour {property_doc['name']}",
+                        related_id=lease['id']
+                    )
+                    notif_dict = notif.model_dump()
+                    notif_dict['created_at'] = notif_dict['created_at'].isoformat()
+                    await db.notifications.insert_one(notif_dict)
+                else:
+                    errors.append(f"Échec pour {tenant['email']}")
+    
+    return {
+        "message": f"{emails_sent} rappel(s) envoyé(s)",
+        "emails_sent": emails_sent,
+        "errors": errors if errors else None
+    }
+
+@api_router.get("/reminders/pending")
+async def get_pending_payments(current_user: dict = Depends(get_current_user)):
+    """Get list of tenants with pending payments for current month"""
+    leases = await db.leases.find({"user_id": current_user['id'], "is_active": True}, {"_id": 0}).to_list(1000)
+    
+    now = datetime.now(timezone.utc)
+    current_month = now.month
+    current_year = now.year
+    
+    pending = []
+    
+    for lease in leases:
+        payment = await db.payments.find_one({
+            "lease_id": lease['id'],
+            "period_month": current_month,
+            "period_year": current_year
+        })
+        
+        if not payment:
+            tenant = await db.tenants.find_one({"id": lease['tenant_id']}, {"_id": 0})
+            property_doc = await db.properties.find_one({"id": lease['property_id']}, {"_id": 0})
+            
+            pending.append({
+                "lease_id": lease['id'],
+                "tenant": tenant,
+                "property": property_doc,
+                "amount_due": lease['rent_amount'] + lease.get('charges', 0),
+                "period_month": current_month,
+                "period_year": current_year
+            })
+    
+    return {"pending": pending, "count": len(pending)}
+
 # ==================== HEALTH CHECK ====================
 
 @api_router.get("/")
