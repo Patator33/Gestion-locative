@@ -16,6 +16,8 @@ import Payments from "./pages/Payments";
 import Vacancies from "./pages/Vacancies";
 import Notifications from "./pages/Notifications";
 import Settings from "./pages/Settings";
+import Documents from "./pages/Documents";
+import CalendarPage from "./pages/Calendar";
 
 function App() {
   // Initialize dark mode from localStorage
@@ -40,10 +42,12 @@ function App() {
           <Route path="/" element={<Layout />}>
             <Route index element={<Navigate to="/dashboard" replace />} />
             <Route path="dashboard" element={<Dashboard />} />
+            <Route path="calendar" element={<CalendarPage />} />
             <Route path="properties" element={<Properties />} />
             <Route path="tenants" element={<Tenants />} />
             <Route path="leases" element={<Leases />} />
             <Route path="payments" element={<Payments />} />
+            <Route path="documents" element={<Documents />} />
             <Route path="vacancies" element={<Vacancies />} />
             <Route path="notifications" element={<Notifications />} />
             <Route path="settings" element={<Settings />} />
