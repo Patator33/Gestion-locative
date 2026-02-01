@@ -8,6 +8,8 @@ Application complète de gestion de parc locatif permettant aux propriétaires e
 - **Backend**: FastAPI (Python) avec Motor (MongoDB async)
 - **Base de données**: MongoDB
 - **Authentification**: JWT (JSON Web Tokens)
+- **Export**: OpenPyXL pour fichiers Excel
+- **Emails**: Gmail SMTP
 
 ## Fonctionnalités Implémentées
 
@@ -43,6 +45,7 @@ Application complète de gestion de parc locatif permettant aux propriétaires e
 - [x] Différentes méthodes (virement, chèque, CB, espèces)
 - [x] Suivi par période (mois/année)
 - [x] Suppression de paiements
+- [x] **Export Excel** avec filtre par année
 
 ### Quittances de Loyer
 - [x] Génération automatique
@@ -69,25 +72,36 @@ Application complète de gestion de parc locatif permettant aux propriétaires e
 - [x] Alertes vacances prolongées
 - [x] Marquage lu/non lu
 
+### Rappels par Email (Gmail SMTP) - NOUVEAU
+- [x] Configuration SMTP dans les paramètres
+- [x] Test de connexion SMTP
+- [x] Envoi de rappels manuels
+- [x] Fréquence configurable (quotidien, hebdomadaire, mensuel)
+- [x] Liste des paiements en attente
+
+### Mode Sombre - NOUVEAU
+- [x] Toggle dans les paramètres
+- [x] Persistance via localStorage
+- [x] Design adapté pour tous les composants
+
 ## Persona Utilisateur
 **Propriétaire/Gestionnaire Immobilier**
 - Possède un ou plusieurs biens locatifs
 - A besoin de suivre les loyers et paiements
 - Veut générer des quittances facilement
 - Souhaite être alerté des événements importants
+- Veut envoyer des rappels automatiques
 
 ## Backlog - Fonctionnalités Futures
 
 ### P1 - Haute Priorité
-- [ ] Export Excel des paiements annuels
-- [ ] Rappels automatiques par email
+- [ ] Automatisation complète des rappels (cron job)
 - [ ] Historique des modifications
 
 ### P2 - Moyenne Priorité
 - [ ] Gestion des documents (scan bail, état des lieux)
 - [ ] Calendrier des échéances
 - [ ] Multi-utilisateurs (gestion d'équipe)
-- [ ] Mode sombre complet
 
 ### P3 - Basse Priorité
 - [ ] Application mobile native
@@ -123,11 +137,21 @@ Application complète de gestion de parc locatif permettant aux propriétaires e
 - GET/POST /api/vacancies
 - PUT /api/vacancies/{id}/end
 
+### Export
+- GET /api/export/payments
+- GET /api/export/payments/excel
+
+### Reminders
+- POST /api/reminders/test-smtp
+- POST /api/reminders/send
+- GET /api/reminders/pending
+
 ### Other
 - GET /api/dashboard/stats
 - GET /api/receipts/{payment_id}
 - GET /api/notifications
 - GET/PUT /api/notifications/settings
 
-## Date de création
-Janvier 2026
+## Dates
+- Création initiale: Février 2026
+- Ajout Export Excel + Rappels Email + Mode Sombre: Février 2026
