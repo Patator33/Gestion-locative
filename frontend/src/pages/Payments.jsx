@@ -214,6 +214,52 @@ const Payments = () => {
     printWindow.print();
   };
 
+  const handleExportExcel = async () => {
+    setExporting(true);
+    try {
+      const response = await exportAPI.paymentsExcel(exportYear !== 'all' ? parseInt(exportYear) : null);
+      
+      // Create download link
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `paiements_${exportYear}_${new Date().toISOString().split('T')[0]}.xlsx`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      
+      toast.success('Export Excel téléchargé');
+    } catch (error) {
+      toast.error('Erreur lors de l\'export Excel');
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleLoadPending = async () => {
+    try {
+      const response = await remindersAPI.getPending();
+      setPendingPayments(response.data.pending);
+      setPendingDialogOpen(true);
+    } catch (error) {
+      toast.error('Erreur lors du chargement');
+    }
+  };
+
+  const handleSendReminders = async () => {
+    setSendingReminders(true);
+    try {
+      const response = await remindersAPI.send();
+      toast.success(response.data.message);
+      setPendingDialogOpen(false);
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Erreur lors de l\'envoi des rappels');
+    } finally {
+      setSendingReminders(false);
+    }
+  };
+
   const getPaymentMethodLabel = (method) => {
     return PAYMENT_METHODS.find(m => m.value === method)?.label || method;
   };
