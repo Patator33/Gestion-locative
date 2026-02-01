@@ -1,0 +1,147 @@
+{
+  "identity": {
+    "name": "E1",
+    "role": "Anti-AI Creative Designer",
+    "mission": "Create a rental management platform that feels like a high-end architectural studio tool, not a spreadsheet.",
+    "principles": [
+      "Fusion over Imitation: Mix Swiss precision with Organic warmth.",
+      "Emotion First: Trust and Clarity.",
+      "Content is King: Data must be legible but beautiful.",
+      "Negative Space: generous padding to reduce cognitive load."
+    ]
+  },
+  "typography": {
+    "fonts": {
+      "headings": {
+        "family": "Manrope, sans-serif",
+        "weights": ["600", "800"],
+        "usage": "Page titles, Card headers, Marketing headlines. Tight tracking."
+      },
+      "body": {
+        "family": "Inter, sans-serif",
+        "weights": ["400", "500"],
+        "usage": "Table data, form inputs, long text."
+      },
+      "mono": {
+        "family": "JetBrains Mono, monospace",
+        "usage": "IDs, Reference numbers, Financial data alignment."
+      }
+    },
+    "rules": [
+      "Never use Inter for Headings.",
+      "Headings > 32px must have tracking-tight.",
+      "Overlines must be uppercase, text-xs, tracking-widest."
+    ]
+  },
+  "colors": {
+    "theme_strategy": "Structural Swiss + Organic Accents",
+    "palette": {
+      "light": {
+        "background": "#F5F5F4", 
+        "foreground": "#1C1917",
+        "card": "#FFFFFF",
+        "card_foreground": "#1C1917",
+        "primary": "#064E3B", 
+        "primary_foreground": "#FFFFFF",
+        "secondary": "#E7E5E4",
+        "secondary_foreground": "#1C1917",
+        "muted": "#F5F5F4",
+        "muted_foreground": "#78716C",
+        "accent": "#D6D3D1",
+        "accent_foreground": "#1C1917",
+        "destructive": "#991B1B",
+        "destructive_foreground": "#FFFFFF",
+        "border": "#E7E5E4",
+        "input": "#E7E5E4",
+        "ring": "#064E3B"
+      },
+      "dark": {
+        "background": "#0C0A09",
+        "foreground": "#FAFAF9",
+        "card": "#1C1917",
+        "card_foreground": "#FAFAF9",
+        "primary": "#10B981",
+        "primary_foreground": "#064E3B",
+        "secondary": "#292524",
+        "secondary_foreground": "#FAFAF9",
+        "muted": "#292524",
+        "muted_foreground": "#A8A29E",
+        "accent": "#44403C",
+        "accent_foreground": "#FAFAF9",
+        "destructive": "#7F1D1D",
+        "destructive_foreground": "#FAFAF9",
+        "border": "#292524",
+        "input": "#292524",
+        "ring": "#10B981"
+      }
+    },
+    "usage_rules": [
+      "Primary color (Deep Emerald) is for Brand Identity and Primary Actions only.",
+      "Use Stone/Warm Greys for backgrounds, never pure white #FFFFFF for main background in light mode (use #F5F5F4).",
+      "Status Colors: Success = Emerald (#059669), Warning = Amber (#D97706), Error = Red (#DC2626)."
+    ]
+  },
+  "layout": {
+    "spacing_system": {
+      "base": "4px",
+      "scale": ["p-1", "p-2", "p-4", "p-6", "p-8", "p-12", "p-16", "p-24", "p-32"],
+      "philosophy": "Generous. Use p-8 or p-12 for card padding."
+    },
+    "grid_system": {
+      "dashboard": "Bento Grid (Tetris Mode). Mix col-span-1, col-span-2, row-span-2.",
+      "lists": "Dense Table Layout. 100% width, border-collapse.",
+      "marketing": "Asymmetrical Swiss Grid. Overlapping elements."
+    },
+    "container_rules": [
+      "Dashboard Cards: Flat, 1px border (border-border), no shadow by default. Hover: shadow-md.",
+      "Modals/Dialogs: Glassmorphism (backdrop-blur-xl) overlay.",
+      "Max Width: max-w-7xl for dashboard, max-w-screen-2xl for marketing."
+    ]
+  },
+  "components": {
+    "shadcn_customization": {
+      "Button": "Rounded-md (not full pill). Font-medium. Hover: translate-y-[-1px].",
+      "Card": "Remove default shadow. Add border. Use bg-card.",
+      "Input": "bg-input/50. Focus: ring-2 ring-primary/20 border-primary.",
+      "Table": "Header: uppercase, text-xs, tracking-wider, text-muted-foreground. Row hover: bg-muted/50."
+    },
+    "custom_components": {
+      "StatCard": "Must use 'Tetris' sizing. Big number (text-4xl), small label.",
+      "StatusBadge": "Pill shape, dot indicator + text. bg-status/10 text-status.",
+      "ImageUpload": "Dashed border, generous padding, drag-drop feel."
+    }
+  },
+  "assets": {
+    "icons": {
+      "library": "lucide-react",
+      "style": "Stroke width 1.5px (light/elegant).",
+      "usage": "Use for navigation, actions, status indicators."
+    },
+    "images": {
+      "login_background": {
+        "url": "https://images.unsplash.com/photo-1758548157747-285c7012db5b?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2NzB8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBtaW5pbWFsaXN0JTIwYXBhcnRtZW50JTIwaW50ZXJpb3IlMjBicmlnaHR8ZW58MHx8fHwxNzY5OTg2OTQwfDA&ixlib=rb-4.1.0&q=85",
+        "alt": "Modern bright apartment interior",
+        "usage": "Split screen login page, right side cover."
+      },
+      "empty_state_keys": {
+        "url": "https://images.unsplash.com/photo-1533696848654-6bdf438edea4?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NTYxNzV8MHwxfHNlYXJjaHwxfHxwcm9wZXJ0eSUyMGtleXMlMjBoYW5kJTIwY2xvc2UlMjB1cHxlbnwwfHx8fDE3Njk5ODY5NDR8MA&ixlib=rb-4.1.0&q=85",
+        "alt": "Keys in hand",
+        "usage": "Empty state for 'No Properties' or 'New Rental'."
+      },
+      "tenant_welcome": {
+        "url": "https://images.unsplash.com/photo-1758523671087-b256bbbca475?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA2ODl8MHwxfHNlYXJjaHwyfHxoYXBweSUyMGRpdmVyc2UlMjB0ZW5hbnRzJTIwbW92aW5nJTIwaW58ZW58MHx8fHwxNzY5OTg2OTQ3fDA&ixlib=rb-4.1.0&q=85",
+        "alt": "Couple moving in",
+        "usage": "Tenant portal dashboard or 'Add Tenant' success screen."
+      }
+    }
+  },
+  "universal_guidelines": [
+    "Avoid 'AI Slop': No generic gradients, no centered layouts without purpose.",
+    "Micro-interactions: Every button, row, and card must react to hover.",
+    "Data-TestID: All interactive elements must have data-testid attribute.",
+    "Accessibility: Ensure contrast ratios. Use APCA standards.",
+    "Motion: Use 'sonner' for toasts. Use framer-motion for page transitions if possible.",
+    "Theme: Default to Light Mode (Professional). Dark Mode is secondary but fully supported."
+  ],
+  "instructions_to_main_agent": "Implement the dashboard using the 'Bento' grid system. Use the provided image URLs for specific sections. Strictly follow the color palette. Do not ask clarifying questions. Assume the persona of a high-end product designer."
+}
