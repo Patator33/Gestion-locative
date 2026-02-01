@@ -1036,6 +1036,295 @@ async def get_pending_payments(current_user: dict = Depends(get_current_user)):
     
     return {"pending": pending, "count": len(pending)}
 
+# ==================== DOCUMENTS ROUTES ====================
+
+@api_router.post("/documents/upload")
+async def upload_document(
+    file: UploadFile = File(...),
+    name: str = Form(...),
+    document_type: str = Form(...),
+    related_type: str = Form(...),
+    related_id: str = Form(...),
+    notes: str = Form(None),
+    current_user: dict = Depends(get_current_user)
+):
+    """Upload a document"""
+    # Validate file size (max 10MB)
+    contents = await file.read()
+    if len(contents) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Fichier trop volumineux (max 10MB)")
+    
+    # Generate unique filename
+    file_ext = Path(file.filename).suffix
+    unique_filename = f"{uuid.uuid4()}{file_ext}"
+    file_path = UPLOADS_DIR / unique_filename
+    
+    # Save file
+    with open(file_path, "wb") as f:
+        f.write(contents)
+    
+    # Create document record
+    doc = Document(
+        name=name,
+        document_type=document_type,
+        related_type=related_type,
+        related_id=related_id,
+        notes=notes,
+        user_id=current_user['id'],
+        filename=unique_filename,
+        file_size=len(contents),
+        mime_type=file.content_type or "application/octet-stream"
+    )
+    
+    doc_dict = doc.model_dump()
+    doc_dict['created_at'] = doc_dict['created_at'].isoformat()
+    await db.documents.insert_one(doc_dict)
+    
+    return {"id": doc.id, "message": "Document uploadé avec succès"}
+
+@api_router.get("/documents")
+async def get_documents(
+    related_type: str = None,
+    related_id: str = None,
+    current_user: dict = Depends(get_current_user)
+):
+    """Get all documents or filtered by related entity"""
+    query = {"user_id": current_user['id']}
+    if related_type:
+        query["related_type"] = related_type
+    if related_id:
+        query["related_id"] = related_id
+    
+    documents = await db.documents.find(query, {"_id": 0}).sort("created_at", -1).to_list(1000)
+    return documents
+
+@api_router.get("/documents/{document_id}")
+async def get_document(document_id: str, current_user: dict = Depends(get_current_user)):
+    """Get document metadata"""
+    doc = await db.documents.find_one(
+        {"id": document_id, "user_id": current_user['id']}, {"_id": 0}
+    )
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document non trouvé")
+    return doc
+
+@api_router.get("/documents/{document_id}/download")
+async def download_document(document_id: str, current_user: dict = Depends(get_current_user)):
+    """Download a document file"""
+    doc = await db.documents.find_one(
+        {"id": document_id, "user_id": current_user['id']}, {"_id": 0}
+    )
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document non trouvé")
+    
+    file_path = UPLOADS_DIR / doc['filename']
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Fichier non trouvé")
+    
+    return FileResponse(
+        file_path,
+        media_type=doc['mime_type'],
+        filename=f"{doc['name']}{Path(doc['filename']).suffix}"
+    )
+
+@api_router.delete("/documents/{document_id}")
+async def delete_document(document_id: str, current_user: dict = Depends(get_current_user)):
+    """Delete a document"""
+    doc = await db.documents.find_one(
+        {"id": document_id, "user_id": current_user['id']}, {"_id": 0}
+    )
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document non trouvé")
+    
+    # Delete file
+    file_path = UPLOADS_DIR / doc['filename']
+    if file_path.exists():
+        file_path.unlink()
+    
+    # Delete record
+    await db.documents.delete_one({"id": document_id})
+    
+    return {"message": "Document supprimé avec succès"}
+
+# ==================== CALENDAR ROUTES ====================
+
+@api_router.get("/calendar/events")
+async def get_calendar_events(
+    month: int = None,
+    year: int = None,
+    current_user: dict = Depends(get_current_user)
+):
+    """Get calendar events for a specific month or all upcoming events"""
+    user_id = current_user['id']
+    events = []
+    
+    now = datetime.now(timezone.utc)
+    target_month = month or now.month
+    target_year = year or now.year
+    
+    # Get active leases for payment due dates
+    leases = await db.leases.find({"user_id": user_id, "is_active": True}, {"_id": 0}).to_list(1000)
+    
+    for lease in leases:
+        property_doc = await db.properties.find_one({"id": lease['property_id']}, {"_id": 0})
+        tenant = await db.tenants.find_one({"id": lease['tenant_id']}, {"_id": 0})
+        
+        if property_doc and tenant:
+            # Payment due date
+            payment_day = lease.get('payment_day', 1)
+            due_date = f"{target_year}-{target_month:02d}-{payment_day:02d}"
+            
+            # Check if payment exists
+            payment = await db.payments.find_one({
+                "lease_id": lease['id'],
+                "period_month": target_month,
+                "period_year": target_year
+            })
+            
+            events.append({
+                "id": f"payment-{lease['id']}-{target_month}-{target_year}",
+                "title": f"Loyer - {property_doc['name']}",
+                "date": due_date,
+                "type": "payment_due" if not payment else "payment_done",
+                "related_id": lease['id'],
+                "property_name": property_doc['name'],
+                "tenant_name": f"{tenant['first_name']} {tenant['last_name']}",
+                "amount": lease['rent_amount'] + lease.get('charges', 0),
+                "is_paid": payment is not None
+            })
+            
+            # Lease end date if within next 3 months
+            if lease.get('end_date'):
+                end_date = datetime.fromisoformat(lease['end_date'].replace('Z', '+00:00') if isinstance(lease['end_date'], str) else lease['end_date'].isoformat())
+                if end_date.month == target_month and end_date.year == target_year:
+                    events.append({
+                        "id": f"lease-end-{lease['id']}",
+                        "title": f"Fin de bail - {property_doc['name']}",
+                        "date": lease['end_date'][:10] if isinstance(lease['end_date'], str) else lease['end_date'].strftime('%Y-%m-%d'),
+                        "type": "lease_end",
+                        "related_id": lease['id'],
+                        "property_name": property_doc['name'],
+                        "tenant_name": f"{tenant['first_name']} {tenant['last_name']}",
+                        "amount": None
+                    })
+    
+    # Get active vacancies
+    vacancies = await db.vacancies.find({"user_id": user_id, "is_active": True}, {"_id": 0}).to_list(1000)
+    
+    for vacancy in vacancies:
+        property_doc = await db.properties.find_one({"id": vacancy['property_id']}, {"_id": 0})
+        if property_doc:
+            start_date = vacancy['start_date']
+            if isinstance(start_date, str):
+                start_dt = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
+            else:
+                start_dt = start_date
+            
+            if start_dt.month == target_month and start_dt.year == target_year:
+                events.append({
+                    "id": f"vacancy-{vacancy['id']}",
+                    "title": f"Vacance - {property_doc['name']}",
+                    "date": start_date[:10] if isinstance(start_date, str) else start_date.strftime('%Y-%m-%d'),
+                    "type": "vacancy",
+                    "related_id": vacancy['id'],
+                    "property_name": property_doc['name'],
+                    "tenant_name": None,
+                    "amount": None
+                })
+    
+    return {"events": events, "month": target_month, "year": target_year}
+
+# ==================== AUTOMATED REMINDERS ====================
+
+async def send_automated_reminders():
+    """Background task to send automated payment reminders"""
+    logger.info("Running automated reminders check...")
+    
+    # Get all users with email reminders enabled
+    users_settings = await db.notification_settings.find({
+        "email_reminders": True,
+        "smtp_configured": True
+    }, {"_id": 0}).to_list(1000)
+    
+    for settings in users_settings:
+        user_id = settings['user_id']
+        frequency = settings.get('reminder_frequency', 'weekly')
+        
+        # Check if it's time to send based on frequency
+        now = datetime.now(timezone.utc)
+        
+        # For weekly: send on Mondays
+        # For monthly: send on 1st of month
+        # For daily: always send
+        should_send = False
+        if frequency == 'daily':
+            should_send = True
+        elif frequency == 'weekly' and now.weekday() == 0:  # Monday
+            should_send = True
+        elif frequency == 'monthly' and now.day == 1:
+            should_send = True
+        
+        if not should_send:
+            continue
+        
+        # Get active leases for this user
+        leases = await db.leases.find({"user_id": user_id, "is_active": True}, {"_id": 0}).to_list(1000)
+        
+        current_month = now.month
+        current_year = now.year
+        
+        for lease in leases:
+            # Check if payment exists for current month
+            payment = await db.payments.find_one({
+                "lease_id": lease['id'],
+                "period_month": current_month,
+                "period_year": current_year
+            })
+            
+            if not payment:
+                tenant = await db.tenants.find_one({"id": lease['tenant_id']}, {"_id": 0})
+                property_doc = await db.properties.find_one({"id": lease['property_id']}, {"_id": 0})
+                user = await db.users.find_one({"id": user_id}, {"_id": 0, "password": 0})
+                
+                if tenant and tenant.get('email') and property_doc and user:
+                    months_fr = ["", "Janvier", "Février", "Mars", "Avril", "Mai", "Juin", 
+                                "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"]
+                    
+                    total_rent = lease['rent_amount'] + lease.get('charges', 0)
+                    
+                    html_content = f"""
+                    <html>
+                    <body style="font-family: Arial, sans-serif; padding: 20px; max-width: 600px; margin: 0 auto;">
+                        <div style="background: #064E3B; color: white; padding: 20px; border-radius: 8px 8px 0 0;">
+                            <h1 style="margin: 0;">Rappel automatique de loyer</h1>
+                        </div>
+                        <div style="border: 1px solid #E7E5E4; border-top: none; padding: 30px; border-radius: 0 0 8px 8px;">
+                            <p>Bonjour {tenant['first_name']} {tenant['last_name']},</p>
+                            <p>Ceci est un rappel automatique concernant le loyer du mois de <strong>{months_fr[current_month]} {current_year}</strong>.</p>
+                            <div style="background: #F5F5F4; padding: 15px; border-radius: 8px; margin: 20px 0;">
+                                <p style="margin: 0;"><strong>{property_doc['name']}</strong></p>
+                                <p style="margin: 5px 0 0 0; color: #78716C;">{property_doc['address']}</p>
+                            </div>
+                            <p><strong>Montant attendu :</strong> {total_rent:.2f} €</p>
+                            <p>Cordialement,<br><strong>{user['name']}</strong></p>
+                        </div>
+                    </body>
+                    </html>
+                    """
+                    
+                    success = send_email_smtp(
+                        settings['smtp_email'],
+                        settings['smtp_password'],
+                        tenant['email'],
+                        f"[Rappel Auto] Loyer - {months_fr[current_month]} {current_year}",
+                        html_content
+                    )
+                    
+                    if success:
+                        logger.info(f"Auto reminder sent to {tenant['email']}")
+                    else:
+                        logger.error(f"Failed to send auto reminder to {tenant['email']}")
+
 # ==================== HEALTH CHECK ====================
 
 @api_router.get("/")
