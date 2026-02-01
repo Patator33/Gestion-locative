@@ -112,4 +112,27 @@ export const remindersAPI = {
   getPending: () => api.get('/reminders/pending')
 };
 
+// Documents
+export const documentsAPI = {
+  getAll: (relatedType, relatedId) => {
+    let url = '/documents';
+    const params = [];
+    if (relatedType) params.push(`related_type=${relatedType}`);
+    if (relatedId) params.push(`related_id=${relatedId}`);
+    if (params.length) url += '?' + params.join('&');
+    return api.get(url);
+  },
+  getOne: (id) => api.get(`/documents/${id}`),
+  upload: (formData) => api.post('/documents/upload', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  }),
+  download: (id) => api.get(`/documents/${id}/download`, { responseType: 'blob' }),
+  delete: (id) => api.delete(`/documents/${id}`)
+};
+
+// Calendar
+export const calendarAPI = {
+  getEvents: (month, year) => api.get(`/calendar/events?month=${month}&year=${year}`)
+};
+
 export default api;
