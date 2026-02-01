@@ -334,11 +334,12 @@ const Payments = () => {
             onClick={() => setDialogOpen(true)} 
             className="btn-hover"
             disabled={leases.length === 0}
-          data-testid="add-payment-btn"
-        >
-          <Plus className="mr-2 h-4 w-4" />
-          Enregistrer un paiement
-        </Button>
+            data-testid="add-payment-btn"
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            Enregistrer un paiement
+          </Button>
+        </div>
       </div>
 
       {/* Search */}
