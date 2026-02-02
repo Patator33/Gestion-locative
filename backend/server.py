@@ -329,6 +329,44 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Token invalide")
 
+# ==================== AUDIT LOG HELPER ====================
+
+async def create_audit_log(
+    user_id: str,
+    user_name: str,
+    action: str,
+    entity_type: str,
+    entity_id: str,
+    entity_name: str,
+    team_id: str = None,
+    changes: dict = None
+):
+    """Create an audit log entry for tracking changes"""
+    log = AuditLog(
+        user_id=user_id,
+        user_name=user_name,
+        team_id=team_id,
+        action=action,
+        entity_type=entity_type,
+        entity_id=entity_id,
+        entity_name=entity_name,
+        changes=changes
+    )
+    log_dict = log.model_dump()
+    log_dict['created_at'] = log_dict['created_at'].isoformat()
+    await db.audit_logs.insert_one(log_dict)
+    return log
+
+def get_changes(old_data: dict, new_data: dict, fields_to_track: list) -> dict:
+    """Compare old and new data to get changes"""
+    changes = {}
+    for field in fields_to_track:
+        old_val = old_data.get(field)
+        new_val = new_data.get(field)
+        if old_val != new_val:
+            changes[field] = {"old": old_val, "new": new_val}
+    return changes if changes else None
+
 # ==================== AUTH ROUTES ====================
 
 @api_router.post("/auth/register", response_model=Token)
