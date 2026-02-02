@@ -562,8 +562,17 @@ async def delete_tenant(tenant_id: str, current_user: dict = Depends(get_current
         raise HTTPException(status_code=404, detail="Locataire non trouvé")
     
     await db.tenants.delete_one({"id": tenant_id, "user_id": current_user['id']})
-    if result.deleted_count == 0:
-        raise HTTPException(status_code=404, detail="Locataire non trouvé")
+    
+    # Audit log
+    await create_audit_log(
+        user_id=current_user['id'],
+        user_name=current_user['name'],
+        action="delete",
+        entity_type="tenant",
+        entity_id=tenant_id,
+        entity_name=f"{tenant_doc['first_name']} {tenant_doc['last_name']}"
+    )
+    
     return {"message": "Locataire supprimé avec succès"}
 
 # ==================== LEASES ROUTES ====================
