@@ -106,6 +106,16 @@ Application complète de gestion de parc locatif permettant aux propriétaires e
 - [x] Support Apple Touch Icons
 - [x] Theme color personnalisé (#064E3B)
 
+### Notifications Push - NOUVEAU (Février 2026)
+- [x] Configuration VAPID (clés publique/privée)
+- [x] API d'abonnement/désabonnement (/api/push/subscribe)
+- [x] Envoi de notifications via Web Push API
+- [x] Stockage des abonnements en base de données
+- [x] Interface de gestion dans les Paramètres
+- [x] Bouton de test des notifications
+- [x] Gestion des permissions bloquées
+- [x] Nettoyage automatique des abonnements invalides
+
 ### Gestion des Documents
 - [x] Upload de fichiers (PDF, DOC, DOCX, JPG, PNG)
 - [x] Limite 10MB par fichier
