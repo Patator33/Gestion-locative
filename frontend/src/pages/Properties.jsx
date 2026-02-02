@@ -160,25 +160,25 @@ const Properties = () => {
   }
 
   return (
-    <div className="space-y-8" data-testid="properties-page">
+    <div className="space-y-6 sm:space-y-8" data-testid="properties-page">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight" style={{ fontFamily: 'Manrope, sans-serif' }}>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight" style={{ fontFamily: 'Manrope, sans-serif' }}>
             Biens immobiliers
           </h1>
-          <p className="text-muted-foreground mt-1">
+          <p className="text-muted-foreground mt-1 text-sm sm:text-base">
             Gérez votre parc locatif
           </p>
         </div>
-        <Button onClick={() => handleOpenDialog()} className="btn-hover" data-testid="add-property-btn">
+        <Button onClick={() => handleOpenDialog()} className="btn-hover w-full sm:w-auto" data-testid="add-property-btn">
           <Plus className="mr-2 h-4 w-4" />
           Ajouter un bien
         </Button>
       </div>
 
       {/* Search */}
-      <div className="relative max-w-md">
+      <div className="relative w-full sm:max-w-md">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
           placeholder="Rechercher un bien..."
@@ -191,7 +191,7 @@ const Properties = () => {
 
       {/* Properties Grid */}
       {filteredProperties.length > 0 ? (
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-4 sm:gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
           {filteredProperties.map((property, index) => (
             <Card 
               key={property.id} 
@@ -308,7 +308,7 @@ const Properties = () => {
 
       {/* Add/Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto mx-4 sm:mx-auto">
           <DialogHeader>
             <DialogTitle style={{ fontFamily: 'Manrope, sans-serif' }}>
               {editingProperty ? 'Modifier le bien' : 'Ajouter un bien'}
@@ -319,7 +319,7 @@ const Properties = () => {
           </DialogHeader>
           <form onSubmit={handleSubmit}>
             <div className="grid gap-4 py-4">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="name">Nom du bien *</Label>
                   <Input
@@ -363,7 +363,7 @@ const Properties = () => {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="postal_code">Code postal *</Label>
                   <Input
@@ -388,7 +388,7 @@ const Properties = () => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="surface">Surface (m²) *</Label>
                   <Input
@@ -416,7 +416,7 @@ const Properties = () => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="rent_amount">Loyer mensuel (€) *</Label>
                   <Input
