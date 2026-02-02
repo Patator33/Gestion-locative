@@ -96,6 +96,16 @@ Application complète de gestion de parc locatif permettant aux propriétaires e
 - [x] Fermeture automatique du menu sur navigation
 - [x] Support clavier (Escape pour fermer)
 
+### Progressive Web App (PWA) - NOUVEAU (Février 2026)
+- [x] Manifest.json avec métadonnées complètes
+- [x] Service Worker pour cache et mode hors ligne
+- [x] Icônes PWA multiples tailles (72px à 512px)
+- [x] Installation sur l'écran d'accueil (iOS & Android)
+- [x] Indicateur de mode hors ligne
+- [x] Bannière d'installation intelligente
+- [x] Support Apple Touch Icons
+- [x] Theme color personnalisé (#064E3B)
+
 ### Gestion des Documents
 - [x] Upload de fichiers (PDF, DOC, DOCX, JPG, PNG)
 - [x] Limite 10MB par fichier
