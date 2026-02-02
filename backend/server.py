@@ -418,6 +418,17 @@ async def create_property(property_data: PropertyCreate, current_user: dict = De
     doc = property_obj.model_dump()
     doc['created_at'] = doc['created_at'].isoformat()
     await db.properties.insert_one(doc)
+    
+    # Audit log
+    await create_audit_log(
+        user_id=current_user['id'],
+        user_name=current_user['name'],
+        action="create",
+        entity_type="property",
+        entity_id=property_obj.id,
+        entity_name=property_obj.name
+    )
+    
     return {"id": property_obj.id, "message": "Bien créé avec succès"}
 
 @api_router.get("/properties", response_model=List[dict])
@@ -436,19 +447,50 @@ async def get_property(property_id: str, current_user: dict = Depends(get_curren
 
 @api_router.put("/properties/{property_id}", response_model=dict)
 async def update_property(property_id: str, property_data: PropertyCreate, current_user: dict = Depends(get_current_user)):
+    # Get old data for audit
+    old_property = await db.properties.find_one({"id": property_id, "user_id": current_user['id']}, {"_id": 0})
+    if not old_property:
+        raise HTTPException(status_code=404, detail="Bien non trouvé")
+    
     result = await db.properties.update_one(
         {"id": property_id, "user_id": current_user['id']},
         {"$set": property_data.model_dump()}
     )
-    if result.matched_count == 0:
-        raise HTTPException(status_code=404, detail="Bien non trouvé")
+    
+    # Audit log
+    changes = get_changes(old_property, property_data.model_dump(), 
+        ['name', 'address', 'city', 'postal_code', 'property_type', 'surface', 'rooms', 'rent_amount', 'charges'])
+    if changes:
+        await create_audit_log(
+            user_id=current_user['id'],
+            user_name=current_user['name'],
+            action="update",
+            entity_type="property",
+            entity_id=property_id,
+            entity_name=property_data.name,
+            changes=changes
+        )
+    
     return {"message": "Bien mis à jour avec succès"}
 
 @api_router.delete("/properties/{property_id}")
 async def delete_property(property_id: str, current_user: dict = Depends(get_current_user)):
-    result = await db.properties.delete_one({"id": property_id, "user_id": current_user['id']})
-    if result.deleted_count == 0:
+    property_doc = await db.properties.find_one({"id": property_id, "user_id": current_user['id']}, {"_id": 0})
+    if not property_doc:
         raise HTTPException(status_code=404, detail="Bien non trouvé")
+    
+    await db.properties.delete_one({"id": property_id, "user_id": current_user['id']})
+    
+    # Audit log
+    await create_audit_log(
+        user_id=current_user['id'],
+        user_name=current_user['name'],
+        action="delete",
+        entity_type="property",
+        entity_id=property_id,
+        entity_name=property_doc['name']
+    )
+    
     return {"message": "Bien supprimé avec succès"}
 
 # ==================== TENANTS ROUTES ====================
@@ -459,6 +501,17 @@ async def create_tenant(tenant_data: TenantCreate, current_user: dict = Depends(
     doc = tenant_obj.model_dump()
     doc['created_at'] = doc['created_at'].isoformat()
     await db.tenants.insert_one(doc)
+    
+    # Audit log
+    await create_audit_log(
+        user_id=current_user['id'],
+        user_name=current_user['name'],
+        action="create",
+        entity_type="tenant",
+        entity_id=tenant_obj.id,
+        entity_name=f"{tenant_obj.first_name} {tenant_obj.last_name}"
+    )
+    
     return {"id": tenant_obj.id, "message": "Locataire créé avec succès"}
 
 @api_router.get("/tenants", response_model=List[dict])
@@ -477,17 +530,38 @@ async def get_tenant(tenant_id: str, current_user: dict = Depends(get_current_us
 
 @api_router.put("/tenants/{tenant_id}", response_model=dict)
 async def update_tenant(tenant_id: str, tenant_data: TenantCreate, current_user: dict = Depends(get_current_user)):
-    result = await db.tenants.update_one(
+    old_tenant = await db.tenants.find_one({"id": tenant_id, "user_id": current_user['id']}, {"_id": 0})
+    if not old_tenant:
+        raise HTTPException(status_code=404, detail="Locataire non trouvé")
+    
+    await db.tenants.update_one(
         {"id": tenant_id, "user_id": current_user['id']},
         {"$set": tenant_data.model_dump()}
     )
-    if result.matched_count == 0:
-        raise HTTPException(status_code=404, detail="Locataire non trouvé")
+    
+    # Audit log
+    changes = get_changes(old_tenant, tenant_data.model_dump(),
+        ['first_name', 'last_name', 'email', 'phone', 'profession'])
+    if changes:
+        await create_audit_log(
+            user_id=current_user['id'],
+            user_name=current_user['name'],
+            action="update",
+            entity_type="tenant",
+            entity_id=tenant_id,
+            entity_name=f"{tenant_data.first_name} {tenant_data.last_name}",
+            changes=changes
+        )
+    
     return {"message": "Locataire mis à jour avec succès"}
 
 @api_router.delete("/tenants/{tenant_id}")
 async def delete_tenant(tenant_id: str, current_user: dict = Depends(get_current_user)):
-    result = await db.tenants.delete_one({"id": tenant_id, "user_id": current_user['id']})
+    tenant_doc = await db.tenants.find_one({"id": tenant_id, "user_id": current_user['id']}, {"_id": 0})
+    if not tenant_doc:
+        raise HTTPException(status_code=404, detail="Locataire non trouvé")
+    
+    await db.tenants.delete_one({"id": tenant_id, "user_id": current_user['id']})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Locataire non trouvé")
     return {"message": "Locataire supprimé avec succès"}
