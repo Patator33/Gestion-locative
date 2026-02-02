@@ -1508,6 +1508,169 @@ async def send_automated_reminders():
                     else:
                         logger.error(f"Failed to send auto reminder to {tenant['email']}")
 
+# ==================== PUSH NOTIFICATIONS ====================
+
+class PushSubscription(BaseModel):
+    endpoint: str
+    keys: dict  # Contains p256dh and auth keys
+
+class PushSubscriptionCreate(BaseModel):
+    subscription: PushSubscription
+
+class PushNotificationSend(BaseModel):
+    title: str
+    body: str
+    url: Optional[str] = "/"
+    user_ids: Optional[List[str]] = None  # If None, send to all users
+
+@api_router.get("/push/vapid-public-key")
+async def get_vapid_public_key():
+    """Get the VAPID public key for push subscription"""
+    if not VAPID_PUBLIC_KEY:
+        raise HTTPException(status_code=500, detail="Push notifications not configured")
+    return {"publicKey": VAPID_PUBLIC_KEY}
+
+@api_router.post("/push/subscribe")
+async def subscribe_to_push(
+    subscription_data: PushSubscriptionCreate,
+    current_user: dict = Depends(get_current_user)
+):
+    """Subscribe a user to push notifications"""
+    subscription = subscription_data.subscription
+    
+    # Check if subscription already exists
+    existing = await db.push_subscriptions.find_one({
+        "user_id": current_user['id'],
+        "endpoint": subscription.endpoint
+    })
+    
+    if existing:
+        # Update existing subscription
+        await db.push_subscriptions.update_one(
+            {"_id": existing["_id"]},
+            {"$set": {"keys": subscription.keys, "updated_at": datetime.now(timezone.utc).isoformat()}}
+        )
+        return {"message": "Abonnement mis à jour", "subscribed": True}
+    
+    # Create new subscription
+    sub_doc = {
+        "id": str(uuid.uuid4()),
+        "user_id": current_user['id'],
+        "endpoint": subscription.endpoint,
+        "keys": subscription.keys,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.push_subscriptions.insert_one(sub_doc)
+    
+    return {"message": "Abonnement aux notifications activé", "subscribed": True}
+
+@api_router.delete("/push/unsubscribe")
+async def unsubscribe_from_push(
+    endpoint: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Unsubscribe from push notifications"""
+    result = await db.push_subscriptions.delete_one({
+        "user_id": current_user['id'],
+        "endpoint": endpoint
+    })
+    
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Abonnement non trouvé")
+    
+    return {"message": "Désabonnement effectué", "subscribed": False}
+
+@api_router.get("/push/status")
+async def get_push_status(current_user: dict = Depends(get_current_user)):
+    """Check if user has push notifications enabled"""
+    count = await db.push_subscriptions.count_documents({"user_id": current_user['id']})
+    return {"subscribed": count > 0, "subscription_count": count}
+
+async def send_push_notification(user_id: str, title: str, body: str, url: str = "/"):
+    """Send push notification to a specific user"""
+    if not VAPID_PRIVATE_KEY or not VAPID_PUBLIC_KEY:
+        logger.warning("VAPID keys not configured, skipping push notification")
+        return 0
+    
+    subscriptions = await db.push_subscriptions.find({"user_id": user_id}, {"_id": 0}).to_list(100)
+    
+    sent_count = 0
+    for sub in subscriptions:
+        try:
+            subscription_info = {
+                "endpoint": sub['endpoint'],
+                "keys": sub['keys']
+            }
+            
+            payload = json.dumps({
+                "title": title,
+                "body": body,
+                "url": url
+            })
+            
+            webpush(
+                subscription_info=subscription_info,
+                data=payload,
+                vapid_private_key=VAPID_PRIVATE_KEY,
+                vapid_claims={"sub": VAPID_CLAIMS_EMAIL}
+            )
+            sent_count += 1
+            logger.info(f"Push notification sent to user {user_id}")
+        except WebPushException as e:
+            logger.error(f"Push notification failed: {e}")
+            # Remove invalid subscription
+            if e.response and e.response.status_code in [404, 410]:
+                await db.push_subscriptions.delete_one({"endpoint": sub['endpoint']})
+                logger.info(f"Removed invalid subscription for user {user_id}")
+        except Exception as e:
+            logger.error(f"Push notification error: {e}")
+    
+    return sent_count
+
+@api_router.post("/push/send")
+async def send_push_to_users(
+    notification: PushNotificationSend,
+    current_user: dict = Depends(get_current_user)
+):
+    """Send push notification to specific users or all users (admin only)"""
+    total_sent = 0
+    
+    if notification.user_ids:
+        # Send to specific users
+        for user_id in notification.user_ids:
+            sent = await send_push_notification(
+                user_id,
+                notification.title,
+                notification.body,
+                notification.url
+            )
+            total_sent += sent
+    else:
+        # Send to current user only (for testing)
+        total_sent = await send_push_notification(
+            current_user['id'],
+            notification.title,
+            notification.body,
+            notification.url
+        )
+    
+    return {"message": f"{total_sent} notification(s) envoyée(s)", "sent_count": total_sent}
+
+@api_router.post("/push/test")
+async def test_push_notification(current_user: dict = Depends(get_current_user)):
+    """Send a test push notification to the current user"""
+    sent = await send_push_notification(
+        current_user['id'],
+        "Test RentMaestro",
+        "Les notifications push fonctionnent correctement !",
+        "/notifications"
+    )
+    
+    if sent > 0:
+        return {"message": "Notification de test envoyée", "success": True}
+    else:
+        raise HTTPException(status_code=400, detail="Aucun abonnement trouvé. Activez d'abord les notifications.")
+
 # ==================== HEALTH CHECK ====================
 
 @api_router.get("/")
