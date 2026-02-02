@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { notificationsAPI, remindersAPI } from '../lib/api';
+import { usePushNotifications } from '../lib/pwa';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -11,6 +12,8 @@ import { Badge } from '../components/ui/badge';
 import { toast } from 'sonner';
 import { 
   Bell,
+  BellRing,
+  BellOff,
   CreditCard,
   Calendar,
   Home,
@@ -21,7 +24,8 @@ import {
   AlertCircle,
   Moon,
   Sun,
-  Loader2
+  Loader2,
+  Smartphone
 } from 'lucide-react';
 
 const Settings = () => {
