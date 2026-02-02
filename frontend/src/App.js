@@ -4,6 +4,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
 import { Layout } from "./components/layout/Layout";
 import { Toaster } from "./components/ui/sonner";
+import { registerServiceWorker, PWAInstallBanner, OfflineIndicator } from "./lib/pwa";
 
 // Pages
 import Login from "./pages/Login";
@@ -32,9 +33,15 @@ function App() {
     }
   }, []);
 
+  // Register service worker for PWA
+  useEffect(() => {
+    registerServiceWorker();
+  }, []);
+
   return (
     <AuthProvider>
       <BrowserRouter>
+        <OfflineIndicator />
         <Routes>
           {/* Public routes */}
           <Route path="/login" element={<Login />} />
@@ -60,6 +67,7 @@ function App() {
           {/* Catch all - redirect to dashboard */}
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
+        <PWAInstallBanner />
       </BrowserRouter>
       <Toaster position="top-right" richColors />
     </AuthProvider>
