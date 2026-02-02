@@ -18,6 +18,8 @@ import Notifications from "./pages/Notifications";
 import Settings from "./pages/Settings";
 import Documents from "./pages/Documents";
 import CalendarPage from "./pages/Calendar";
+import Teams from "./pages/Teams";
+import HistoryPage from "./pages/History";
 
 function App() {
   // Initialize dark mode from localStorage
@@ -49,6 +51,8 @@ function App() {
             <Route path="payments" element={<Payments />} />
             <Route path="documents" element={<Documents />} />
             <Route path="vacancies" element={<Vacancies />} />
+            <Route path="teams" element={<Teams />} />
+            <Route path="history" element={<HistoryPage />} />
             <Route path="notifications" element={<Notifications />} />
             <Route path="settings" element={<Settings />} />
           </Route>
