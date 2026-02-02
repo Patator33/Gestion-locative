@@ -1698,7 +1698,7 @@ async def invite_to_team(team_id: str, invitation: TeamInvitationBase, current_u
     # Send invitation email if SMTP configured
     settings = await db.notification_settings.find_one({"user_id": current_user['id']}, {"_id": 0})
     if settings and settings.get('smtp_configured'):
-        invite_url = f"https://rent-maestro.preview.emergentagent.com/invite/{invite.token}"
+        invite_url = f"https://rentmaestro.preview.emergentagent.com/invite/{invite.token}"
         html_content = f"""
         <html>
         <body style="font-family: Arial, sans-serif; padding: 20px; max-width: 600px; margin: 0 auto;">

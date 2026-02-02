@@ -4,7 +4,7 @@ import json
 from datetime import datetime, timedelta
 
 class RentMaestroAPITester:
-    def __init__(self, base_url="https://rent-maestro.preview.emergentagent.com"):
+    def __init__(self, base_url="https://rentmaestro.preview.emergentagent.com"):
         self.base_url = base_url
         self.token = None
         self.user_id = None
