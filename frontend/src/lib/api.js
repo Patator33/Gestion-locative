@@ -135,4 +135,32 @@ export const calendarAPI = {
   getEvents: (month, year) => api.get(`/calendar/events?month=${month}&year=${year}`)
 };
 
+// Teams
+export const teamsAPI = {
+  getAll: () => api.get('/teams'),
+  getOne: (id) => api.get(`/teams/${id}`),
+  create: (data) => api.post('/teams', data),
+  update: (id, data) => api.put(`/teams/${id}`, data),
+  delete: (id) => api.delete(`/teams/${id}`),
+  invite: (teamId, data) => api.post(`/teams/${teamId}/invite`, data),
+  getInvitations: (teamId) => api.get(`/teams/${teamId}/invitations`),
+  acceptInvitation: (token) => api.post(`/invitations/${token}/accept`),
+  removeMember: (teamId, userId) => api.delete(`/teams/${teamId}/members/${userId}`),
+  updateRole: (teamId, userId, role) => api.put(`/teams/${teamId}/members/${userId}/role?role=${role}`)
+};
+
+// Audit Logs
+export const auditAPI = {
+  getAll: (entityType, entityId, limit) => {
+    let url = '/audit-logs';
+    const params = [];
+    if (entityType) params.push(`entity_type=${entityType}`);
+    if (entityId) params.push(`entity_id=${entityId}`);
+    if (limit) params.push(`limit=${limit}`);
+    if (params.length) url += '?' + params.join('&');
+    return api.get(url);
+  },
+  getEntityHistory: (entityType, entityId) => api.get(`/audit-logs/entity/${entityType}/${entityId}`)
+};
+
 export default api;
