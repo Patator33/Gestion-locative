@@ -86,7 +86,7 @@ Application complète de gestion de parc locatif permettant aux propriétaires e
 - [x] Persistance via localStorage
 - [x] Design adapté pour tous les composants
 
-### Gestion des Documents - NOUVEAU
+### Gestion des Documents
 - [x] Upload de fichiers (PDF, DOC, DOCX, JPG, PNG)
 - [x] Limite 10MB par fichier
 - [x] Types de documents (bail, état des lieux, attestation, etc.)
@@ -95,7 +95,7 @@ Application complète de gestion de parc locatif permettant aux propriétaires e
 - [x] Suppression de documents
 - [x] Recherche et filtrage
 
-### Calendrier Interactif - NOUVEAU
+### Calendrier Interactif
 - [x] Vue mensuelle avec navigation
 - [x] Événements de loyers (dus/payés)
 - [x] Fins de bail
@@ -103,6 +103,22 @@ Application complète de gestion de parc locatif permettant aux propriétaires e
 - [x] Statistiques du mois (attendu, perçu, en attente)
 - [x] Sélection de jour avec détails
 - [x] Légende des couleurs
+
+### Multi-Utilisateurs / Équipes - NOUVEAU (Février 2026)
+- [x] Création d'équipes
+- [x] Invitation de membres par email
+- [x] Rôles (propriétaire, administrateur, membre, lecteur)
+- [x] Gestion des permissions
+- [x] Suppression d'équipes
+- [x] Retrait de membres
+
+### Journal d'Audit / Historique - NOUVEAU (Février 2026)
+- [x] Suivi des créations d'entités
+- [x] Suivi des modifications avec détails des changements
+- [x] Suivi des suppressions
+- [x] Filtrage par type d'entité
+- [x] Recherche dans l'historique
+- [x] Affichage chronologique
 
 ## Persona Utilisateur
 **Propriétaire/Gestionnaire Immobilier**
@@ -112,17 +128,22 @@ Application complète de gestion de parc locatif permettant aux propriétaires e
 - Souhaite être alerté des événements importants
 - Veut envoyer des rappels automatiques
 - Nécessite de stocker les documents légaux
+- Peut collaborer avec d'autres gestionnaires
 
 ## Backlog - Fonctionnalités Futures
 
+### P1 - Haute Priorité
+- [ ] Internationalisation (i18n) et support multi-devises
+- [ ] Alertes SMS via Twilio
+
 ### P2 - Moyenne Priorité
-- [ ] Multi-utilisateurs (gestion d'équipe)
-- [ ] Historique des modifications
+- [ ] Refactoring backend (découpage de server.py)
+- [ ] Statistiques avancées avec graphiques
 
 ### P3 - Basse Priorité
 - [ ] Application mobile native
 - [ ] Intégration comptable
-- [ ] Statistiques avancées avec IA
+- [ ] IA pour prédictions
 
 ## Endpoints API
 
@@ -172,6 +193,19 @@ Application complète de gestion de parc locatif permettant aux propriétaires e
 - POST /api/reminders/send
 - GET /api/reminders/pending
 
+### Teams - NOUVEAU
+- GET/POST /api/teams
+- GET/PUT/DELETE /api/teams/{id}
+- POST /api/teams/{id}/invite
+- GET /api/teams/{id}/invitations
+- POST /api/invitations/{token}/accept
+- DELETE /api/teams/{id}/members/{user_id}
+- PUT /api/teams/{id}/members/{user_id}/role
+
+### Audit Logs - NOUVEAU
+- GET /api/audit-logs
+- GET /api/audit-logs/entity/{type}/{id}
+
 ### Other
 - GET /api/dashboard/stats
 - GET /api/receipts/{payment_id}
@@ -188,3 +222,4 @@ Application complète de gestion de parc locatif permettant aux propriétaires e
 - Création initiale: Février 2026
 - Ajout Export Excel + Rappels Email + Mode Sombre: Février 2026
 - Ajout Gestion Documents + Calendrier + Automatisation: Février 2026
+- Ajout Multi-Utilisateurs + Journal d'Audit: 2 Février 2026
