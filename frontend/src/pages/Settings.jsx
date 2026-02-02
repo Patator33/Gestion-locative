@@ -128,6 +128,42 @@ const Settings = () => {
     }
   };
 
+  const handleTogglePush = async () => {
+    if (pushSubscribed) {
+      const success = await unsubscribeFromPush();
+      if (success) {
+        toast.success('Notifications push désactivées');
+      } else {
+        toast.error('Erreur lors de la désactivation');
+      }
+    } else {
+      const success = await subscribeToPush();
+      if (success) {
+        toast.success('Notifications push activées');
+      } else if (pushPermission === 'denied') {
+        toast.error('Les notifications sont bloquées. Modifiez les paramètres de votre navigateur.');
+      } else {
+        toast.error('Erreur lors de l\'activation');
+      }
+    }
+  };
+
+  const handleTestPush = async () => {
+    setTestingPush(true);
+    try {
+      const success = await sendTestNotification();
+      if (success) {
+        toast.success('Notification de test envoyée');
+      } else {
+        toast.error('Erreur lors de l\'envoi');
+      }
+    } catch (error) {
+      toast.error('Erreur lors de l\'envoi de la notification');
+    } finally {
+      setTestingPush(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex h-96 items-center justify-center">
@@ -137,16 +173,96 @@ const Settings = () => {
   }
 
   return (
-    <div className="space-y-8 max-w-3xl" data-testid="settings-page">
+    <div className="space-y-6 sm:space-y-8 max-w-3xl" data-testid="settings-page">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold tracking-tight" style={{ fontFamily: 'Manrope, sans-serif' }}>
+        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight" style={{ fontFamily: 'Manrope, sans-serif' }}>
           Paramètres
         </h1>
-        <p className="text-muted-foreground mt-1">
+        <p className="text-muted-foreground mt-1 text-sm sm:text-base">
           Configurez les notifications, emails et préférences
         </p>
       </div>
+
+      {/* Push Notifications */}
+      <Card className="border" data-testid="push-notifications-card">
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <Smartphone className="h-5 w-5 text-primary" />
+            <CardTitle style={{ fontFamily: 'Manrope, sans-serif' }}>
+              Notifications Push
+            </CardTitle>
+          </div>
+          <CardDescription>
+            Recevez des alertes directement sur votre appareil
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {!pushSupported ? (
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <AlertCircle className="h-4 w-4" />
+              <span className="text-sm">Les notifications push ne sont pas supportées par votre navigateur</span>
+            </div>
+          ) : (
+            <>
+              <div className="flex items-center justify-between">
+                <div className="space-y-1">
+                  <Label className="text-base">Activer les notifications</Label>
+                  <p className="text-sm text-muted-foreground">
+                    {pushSubscribed 
+                      ? 'Vous recevrez des notifications sur cet appareil' 
+                      : 'Activez pour recevoir des rappels de loyers'}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  {pushLoading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <>
+                      {pushSubscribed ? (
+                        <BellRing className="h-4 w-4 text-primary" />
+                      ) : (
+                        <BellOff className="h-4 w-4 text-muted-foreground" />
+                      )}
+                      <Switch
+                        checked={pushSubscribed}
+                        onCheckedChange={handleTogglePush}
+                        data-testid="push-toggle"
+                      />
+                    </>
+                  )}
+                </div>
+              </div>
+              
+              {pushSubscribed && (
+                <div className="pt-2">
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={handleTestPush}
+                    disabled={testingPush}
+                    data-testid="test-push-btn"
+                  >
+                    {testingPush ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Send className="mr-2 h-4 w-4" />
+                    )}
+                    Tester les notifications
+                  </Button>
+                </div>
+              )}
+
+              {pushPermission === 'denied' && (
+                <div className="flex items-center gap-2 text-amber-600 dark:text-amber-500">
+                  <AlertCircle className="h-4 w-4" />
+                  <span className="text-sm">Les notifications sont bloquées. Modifiez les paramètres de votre navigateur.</span>
+                </div>
+              )}
+            </>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Appearance Settings */}
       <Card className="border">
