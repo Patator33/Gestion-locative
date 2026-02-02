@@ -245,6 +245,61 @@ class CalendarEvent(BaseModel):
     tenant_name: Optional[str] = None
     amount: Optional[float] = None
 
+# Team/Organization model for multi-user collaboration
+class TeamBase(BaseModel):
+    name: str
+    description: Optional[str] = None
+
+class TeamCreate(TeamBase):
+    pass
+
+class Team(TeamBase):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    owner_id: str
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+# Team member model
+class TeamMemberBase(BaseModel):
+    role: str = "member"  # owner, admin, member, viewer
+
+class TeamMember(TeamMemberBase):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    team_id: str
+    user_id: str
+    invited_by: str
+    joined_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+# Team invitation model
+class TeamInvitationBase(BaseModel):
+    email: EmailStr
+    role: str = "member"
+
+class TeamInvitation(TeamInvitationBase):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    team_id: str
+    invited_by: str
+    status: str = "pending"  # pending, accepted, declined, expired
+    token: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    expires_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc) + timedelta(days=7))
+
+# Audit log model for history tracking
+class AuditLog(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    user_id: str
+    user_name: str
+    team_id: Optional[str] = None
+    action: str  # create, update, delete
+    entity_type: str  # property, tenant, lease, payment, document, vacancy
+    entity_id: str
+    entity_name: str
+    changes: Optional[dict] = None  # For updates: {field: {old: x, new: y}}
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
 # ==================== AUTH HELPERS ====================
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
