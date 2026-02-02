@@ -1424,6 +1424,357 @@ async def send_automated_reminders():
 async def root():
     return {"message": "RentMaestro API v1.0", "status": "healthy"}
 
+# ==================== TEAM ROUTES ====================
+
+@api_router.post("/teams")
+async def create_team(team_data: TeamCreate, current_user: dict = Depends(get_current_user)):
+    """Create a new team"""
+    team = Team(**team_data.model_dump(), owner_id=current_user['id'])
+    team_dict = team.model_dump()
+    team_dict['created_at'] = team_dict['created_at'].isoformat()
+    await db.teams.insert_one(team_dict)
+    
+    # Add owner as team member
+    member = TeamMember(
+        team_id=team.id,
+        user_id=current_user['id'],
+        invited_by=current_user['id'],
+        role="owner"
+    )
+    member_dict = member.model_dump()
+    member_dict['joined_at'] = member_dict['joined_at'].isoformat()
+    await db.team_members.insert_one(member_dict)
+    
+    # Audit log
+    await create_audit_log(
+        user_id=current_user['id'],
+        user_name=current_user['name'],
+        action="create",
+        entity_type="team",
+        entity_id=team.id,
+        entity_name=team.name
+    )
+    
+    return {"id": team.id, "message": "Équipe créée avec succès"}
+
+@api_router.get("/teams")
+async def get_teams(current_user: dict = Depends(get_current_user)):
+    """Get all teams the user belongs to"""
+    # Get team memberships
+    memberships = await db.team_members.find({"user_id": current_user['id']}, {"_id": 0}).to_list(100)
+    team_ids = [m['team_id'] for m in memberships]
+    
+    teams = []
+    for team_id in team_ids:
+        team = await db.teams.find_one({"id": team_id}, {"_id": 0})
+        if team:
+            # Get member count
+            member_count = await db.team_members.count_documents({"team_id": team_id})
+            membership = next((m for m in memberships if m['team_id'] == team_id), None)
+            teams.append({
+                **team,
+                "member_count": member_count,
+                "my_role": membership['role'] if membership else None
+            })
+    
+    return teams
+
+@api_router.get("/teams/{team_id}")
+async def get_team(team_id: str, current_user: dict = Depends(get_current_user)):
+    """Get team details"""
+    # Check membership
+    membership = await db.team_members.find_one(
+        {"team_id": team_id, "user_id": current_user['id']}, {"_id": 0}
+    )
+    if not membership:
+        raise HTTPException(status_code=403, detail="Vous n'êtes pas membre de cette équipe")
+    
+    team = await db.teams.find_one({"id": team_id}, {"_id": 0})
+    if not team:
+        raise HTTPException(status_code=404, detail="Équipe non trouvée")
+    
+    # Get members
+    members = await db.team_members.find({"team_id": team_id}, {"_id": 0}).to_list(100)
+    for member in members:
+        user = await db.users.find_one({"id": member['user_id']}, {"_id": 0, "password": 0})
+        member['user'] = user
+    
+    team['members'] = members
+    team['my_role'] = membership['role']
+    
+    return team
+
+@api_router.put("/teams/{team_id}")
+async def update_team(team_id: str, team_data: TeamCreate, current_user: dict = Depends(get_current_user)):
+    """Update team details"""
+    # Check if user is owner or admin
+    membership = await db.team_members.find_one(
+        {"team_id": team_id, "user_id": current_user['id']}, {"_id": 0}
+    )
+    if not membership or membership['role'] not in ['owner', 'admin']:
+        raise HTTPException(status_code=403, detail="Permission refusée")
+    
+    old_team = await db.teams.find_one({"id": team_id}, {"_id": 0})
+    
+    result = await db.teams.update_one(
+        {"id": team_id},
+        {"$set": team_data.model_dump()}
+    )
+    
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Équipe non trouvée")
+    
+    # Audit log
+    changes = get_changes(old_team, team_data.model_dump(), ['name', 'description'])
+    if changes:
+        await create_audit_log(
+            user_id=current_user['id'],
+            user_name=current_user['name'],
+            action="update",
+            entity_type="team",
+            entity_id=team_id,
+            entity_name=team_data.name,
+            team_id=team_id,
+            changes=changes
+        )
+    
+    return {"message": "Équipe mise à jour avec succès"}
+
+@api_router.delete("/teams/{team_id}")
+async def delete_team(team_id: str, current_user: dict = Depends(get_current_user)):
+    """Delete a team (owner only)"""
+    # Check if user is owner
+    membership = await db.team_members.find_one(
+        {"team_id": team_id, "user_id": current_user['id']}, {"_id": 0}
+    )
+    if not membership or membership['role'] != 'owner':
+        raise HTTPException(status_code=403, detail="Seul le propriétaire peut supprimer l'équipe")
+    
+    team = await db.teams.find_one({"id": team_id}, {"_id": 0})
+    
+    # Delete team, members and invitations
+    await db.teams.delete_one({"id": team_id})
+    await db.team_members.delete_many({"team_id": team_id})
+    await db.team_invitations.delete_many({"team_id": team_id})
+    
+    # Audit log
+    await create_audit_log(
+        user_id=current_user['id'],
+        user_name=current_user['name'],
+        action="delete",
+        entity_type="team",
+        entity_id=team_id,
+        entity_name=team['name'] if team else "Équipe"
+    )
+    
+    return {"message": "Équipe supprimée avec succès"}
+
+# ==================== TEAM INVITATION ROUTES ====================
+
+@api_router.post("/teams/{team_id}/invite")
+async def invite_to_team(team_id: str, invitation: TeamInvitationBase, current_user: dict = Depends(get_current_user)):
+    """Invite a user to a team"""
+    # Check if user is owner or admin
+    membership = await db.team_members.find_one(
+        {"team_id": team_id, "user_id": current_user['id']}, {"_id": 0}
+    )
+    if not membership or membership['role'] not in ['owner', 'admin']:
+        raise HTTPException(status_code=403, detail="Permission refusée")
+    
+    team = await db.teams.find_one({"id": team_id}, {"_id": 0})
+    if not team:
+        raise HTTPException(status_code=404, detail="Équipe non trouvée")
+    
+    # Check if already a member
+    existing_user = await db.users.find_one({"email": invitation.email}, {"_id": 0})
+    if existing_user:
+        existing_member = await db.team_members.find_one(
+            {"team_id": team_id, "user_id": existing_user['id']}
+        )
+        if existing_member:
+            raise HTTPException(status_code=400, detail="Cet utilisateur est déjà membre de l'équipe")
+    
+    # Check if invitation already exists
+    existing_invitation = await db.team_invitations.find_one(
+        {"team_id": team_id, "email": invitation.email, "status": "pending"}
+    )
+    if existing_invitation:
+        raise HTTPException(status_code=400, detail="Une invitation est déjà en attente pour cet email")
+    
+    # Create invitation
+    invite = TeamInvitation(
+        **invitation.model_dump(),
+        team_id=team_id,
+        invited_by=current_user['id']
+    )
+    invite_dict = invite.model_dump()
+    invite_dict['created_at'] = invite_dict['created_at'].isoformat()
+    invite_dict['expires_at'] = invite_dict['expires_at'].isoformat()
+    await db.team_invitations.insert_one(invite_dict)
+    
+    # Send invitation email if SMTP configured
+    settings = await db.notification_settings.find_one({"user_id": current_user['id']}, {"_id": 0})
+    if settings and settings.get('smtp_configured'):
+        invite_url = f"https://rent-maestro.preview.emergentagent.com/invite/{invite.token}"
+        html_content = f"""
+        <html>
+        <body style="font-family: Arial, sans-serif; padding: 20px; max-width: 600px; margin: 0 auto;">
+            <div style="background: #064E3B; color: white; padding: 20px; border-radius: 8px 8px 0 0;">
+                <h1 style="margin: 0;">Invitation à rejoindre une équipe</h1>
+            </div>
+            <div style="border: 1px solid #E7E5E4; border-top: none; padding: 30px; border-radius: 0 0 8px 8px;">
+                <p>Bonjour,</p>
+                <p><strong>{current_user['name']}</strong> vous invite à rejoindre l'équipe <strong>"{team['name']}"</strong> sur RentMaestro.</p>
+                <p>Rôle proposé : <strong>{invitation.role}</strong></p>
+                <div style="text-align: center; margin: 30px 0;">
+                    <a href="{invite_url}" style="background: #064E3B; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; display: inline-block;">
+                        Accepter l'invitation
+                    </a>
+                </div>
+                <p style="font-size: 12px; color: #78716C;">Cette invitation expire dans 7 jours.</p>
+            </div>
+        </body>
+        </html>
+        """
+        send_email_smtp(
+            settings['smtp_email'],
+            settings['smtp_password'],
+            invitation.email,
+            f"Invitation à rejoindre {team['name']} sur RentMaestro",
+            html_content
+        )
+    
+    return {"id": invite.id, "token": invite.token, "message": "Invitation envoyée avec succès"}
+
+@api_router.get("/teams/{team_id}/invitations")
+async def get_team_invitations(team_id: str, current_user: dict = Depends(get_current_user)):
+    """Get pending invitations for a team"""
+    # Check membership
+    membership = await db.team_members.find_one(
+        {"team_id": team_id, "user_id": current_user['id']}, {"_id": 0}
+    )
+    if not membership or membership['role'] not in ['owner', 'admin']:
+        raise HTTPException(status_code=403, detail="Permission refusée")
+    
+    invitations = await db.team_invitations.find(
+        {"team_id": team_id, "status": "pending"}, {"_id": 0}
+    ).to_list(100)
+    
+    return invitations
+
+@api_router.post("/invitations/{token}/accept")
+async def accept_invitation(token: str, current_user: dict = Depends(get_current_user)):
+    """Accept a team invitation"""
+    invitation = await db.team_invitations.find_one({"token": token}, {"_id": 0})
+    if not invitation:
+        raise HTTPException(status_code=404, detail="Invitation non trouvée")
+    
+    if invitation['status'] != 'pending':
+        raise HTTPException(status_code=400, detail="Cette invitation n'est plus valide")
+    
+    # Check if expired
+    expires_at = datetime.fromisoformat(invitation['expires_at'].replace('Z', '+00:00'))
+    if datetime.now(timezone.utc) > expires_at:
+        await db.team_invitations.update_one({"token": token}, {"$set": {"status": "expired"}})
+        raise HTTPException(status_code=400, detail="Cette invitation a expiré")
+    
+    # Check if email matches
+    if invitation['email'] != current_user['email']:
+        raise HTTPException(status_code=403, detail="Cette invitation ne vous est pas destinée")
+    
+    # Add as team member
+    member = TeamMember(
+        team_id=invitation['team_id'],
+        user_id=current_user['id'],
+        invited_by=invitation['invited_by'],
+        role=invitation['role']
+    )
+    member_dict = member.model_dump()
+    member_dict['joined_at'] = member_dict['joined_at'].isoformat()
+    await db.team_members.insert_one(member_dict)
+    
+    # Update invitation status
+    await db.team_invitations.update_one({"token": token}, {"$set": {"status": "accepted"}})
+    
+    team = await db.teams.find_one({"id": invitation['team_id']}, {"_id": 0})
+    
+    return {"message": f"Vous avez rejoint l'équipe {team['name']}", "team_id": invitation['team_id']}
+
+@api_router.delete("/teams/{team_id}/members/{user_id}")
+async def remove_team_member(team_id: str, user_id: str, current_user: dict = Depends(get_current_user)):
+    """Remove a member from a team"""
+    # Check if current user is owner or admin
+    membership = await db.team_members.find_one(
+        {"team_id": team_id, "user_id": current_user['id']}, {"_id": 0}
+    )
+    if not membership or membership['role'] not in ['owner', 'admin']:
+        raise HTTPException(status_code=403, detail="Permission refusée")
+    
+    # Can't remove owner
+    target_membership = await db.team_members.find_one(
+        {"team_id": team_id, "user_id": user_id}, {"_id": 0}
+    )
+    if not target_membership:
+        raise HTTPException(status_code=404, detail="Membre non trouvé")
+    
+    if target_membership['role'] == 'owner':
+        raise HTTPException(status_code=400, detail="Impossible de retirer le propriétaire de l'équipe")
+    
+    await db.team_members.delete_one({"team_id": team_id, "user_id": user_id})
+    
+    return {"message": "Membre retiré de l'équipe"}
+
+@api_router.put("/teams/{team_id}/members/{user_id}/role")
+async def update_member_role(team_id: str, user_id: str, role: str, current_user: dict = Depends(get_current_user)):
+    """Update a team member's role"""
+    # Check if current user is owner
+    membership = await db.team_members.find_one(
+        {"team_id": team_id, "user_id": current_user['id']}, {"_id": 0}
+    )
+    if not membership or membership['role'] != 'owner':
+        raise HTTPException(status_code=403, detail="Seul le propriétaire peut modifier les rôles")
+    
+    if role not in ['admin', 'member', 'viewer']:
+        raise HTTPException(status_code=400, detail="Rôle invalide")
+    
+    result = await db.team_members.update_one(
+        {"team_id": team_id, "user_id": user_id},
+        {"$set": {"role": role}}
+    )
+    
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Membre non trouvé")
+    
+    return {"message": "Rôle mis à jour"}
+
+# ==================== AUDIT LOG ROUTES ====================
+
+@api_router.get("/audit-logs")
+async def get_audit_logs(
+    entity_type: str = None,
+    entity_id: str = None,
+    limit: int = 50,
+    current_user: dict = Depends(get_current_user)
+):
+    """Get audit logs for the current user"""
+    query = {"user_id": current_user['id']}
+    if entity_type:
+        query["entity_type"] = entity_type
+    if entity_id:
+        query["entity_id"] = entity_id
+    
+    logs = await db.audit_logs.find(query, {"_id": 0}).sort("created_at", -1).limit(limit).to_list(limit)
+    return logs
+
+@api_router.get("/audit-logs/entity/{entity_type}/{entity_id}")
+async def get_entity_history(entity_type: str, entity_id: str, current_user: dict = Depends(get_current_user)):
+    """Get history for a specific entity"""
+    logs = await db.audit_logs.find(
+        {"user_id": current_user['id'], "entity_type": entity_type, "entity_id": entity_id},
+        {"_id": 0}
+    ).sort("created_at", -1).to_list(100)
+    return logs
+
 # Include the router in the main app
 app.include_router(api_router)
 
