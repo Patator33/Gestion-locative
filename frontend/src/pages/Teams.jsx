@@ -151,24 +151,24 @@ const Teams = () => {
   }
 
   return (
-    <div className="space-y-8" data-testid="teams-page">
+    <div className="space-y-6 sm:space-y-8" data-testid="teams-page">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight" style={{ fontFamily: 'Manrope, sans-serif' }}>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight" style={{ fontFamily: 'Manrope, sans-serif' }}>
             Équipes
           </h1>
-          <p className="text-muted-foreground mt-1">
+          <p className="text-muted-foreground mt-1 text-sm sm:text-base">
             Collaborez avec d'autres utilisateurs
           </p>
         </div>
-        <Button onClick={() => setCreateDialogOpen(true)} className="btn-hover" data-testid="create-team-btn">
+        <Button onClick={() => setCreateDialogOpen(true)} className="btn-hover w-full sm:w-auto" data-testid="create-team-btn">
           <Plus className="mr-2 h-4 w-4" />
           Créer une équipe
         </Button>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-3">
+      <div className="grid gap-4 sm:gap-6 lg:grid-cols-3">
         {/* Teams List */}
         <Card className="border">
           <CardHeader>

@@ -114,22 +114,22 @@ const HistoryPage = () => {
   }
 
   return (
-    <div className="space-y-8" data-testid="history-page">
+    <div className="space-y-6 sm:space-y-8" data-testid="history-page">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight" style={{ fontFamily: 'Manrope, sans-serif' }}>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight" style={{ fontFamily: 'Manrope, sans-serif' }}>
             Historique
           </h1>
-          <p className="text-muted-foreground mt-1">
+          <p className="text-muted-foreground mt-1 text-sm sm:text-base">
             Suivez toutes les modifications de vos données
           </p>
         </div>
       </div>
 
       {/* Filters */}
-      <div className="flex gap-4">
-        <div className="relative flex-1 max-w-md">
+      <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
+        <div className="relative flex-1 sm:max-w-md">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Rechercher..."
@@ -140,7 +140,7 @@ const HistoryPage = () => {
           />
         </div>
         <Select value={filterType} onValueChange={setFilterType}>
-          <SelectTrigger className="w-48" data-testid="filter-entity-type">
+          <SelectTrigger className="w-full sm:w-48" data-testid="filter-entity-type">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
