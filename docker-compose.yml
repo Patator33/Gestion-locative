@@ -1,0 +1,62 @@
+version: '3.8'
+
+services:
+  # Base de données MongoDB
+  mongodb:
+    image: mongo:6.0
+    container_name: rentmaestro-db
+    restart: unless-stopped
+    volumes:
+      - mongodb_data:/data/db
+    environment:
+      - MONGO_INITDB_DATABASE=rentmaestro
+    networks:
+      - rentmaestro-network
+
+  # Backend FastAPI
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: rentmaestro-backend
+    restart: unless-stopped
+    depends_on:
+      - mongodb
+    environment:
+      - MONGO_URL=mongodb://mongodb:27017
+      - DB_NAME=rentmaestro
+      - JWT_SECRET=${JWT_SECRET:-votre-cle-secrete-a-changer}
+      - VAPID_PRIVATE_KEY=${VAPID_PRIVATE_KEY}
+      - VAPID_PUBLIC_KEY=${VAPID_PUBLIC_KEY}
+      - VAPID_CLAIMS_EMAIL=${VAPID_CLAIMS_EMAIL:-mailto:contact@example.com}
+      - CORS_ORIGINS=${CORS_ORIGINS:-*}
+    volumes:
+      - uploads_data:/app/uploads
+    ports:
+      - "8001:8001"
+    networks:
+      - rentmaestro-network
+
+  # Frontend React
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        - REACT_APP_BACKEND_URL=${REACT_APP_BACKEND_URL:-http://localhost}
+    container_name: rentmaestro-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "80:80"
+    networks:
+      - rentmaestro-network
+
+volumes:
+  mongodb_data:
+  uploads_data:
+
+networks:
+  rentmaestro-network:
+    driver: bridge
