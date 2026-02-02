@@ -266,7 +266,7 @@ class TestTeamInvitations:
         assert invite_response.status_code == 200
         data = invite_response.json()
         assert 'message' in data
-        assert 'invitation_token' in data
+        assert 'token' in data  # API returns 'token' field for invitation token
     
     def test_invite_with_different_roles(self, auth_session):
         """Test inviting members with different roles"""
