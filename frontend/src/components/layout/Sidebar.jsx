@@ -12,7 +12,9 @@ import {
   LogOut,
   Home,
   FolderOpen,
-  CalendarDays
+  CalendarDays,
+  UsersRound,
+  History
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { cn } from '../../lib/utils';
@@ -27,6 +29,8 @@ const navItems = [
   { to: '/payments', icon: CreditCard, label: 'Paiements' },
   { to: '/documents', icon: FolderOpen, label: 'Documents' },
   { to: '/vacancies', icon: Calendar, label: 'Vacances' },
+  { to: '/teams', icon: UsersRound, label: 'Équipes' },
+  { to: '/history', icon: History, label: 'Historique' },
   { to: '/notifications', icon: Bell, label: 'Notifications' },
   { to: '/settings', icon: Settings, label: 'Paramètres' },
 ];
