@@ -86,6 +86,16 @@ Application complète de gestion de parc locatif permettant aux propriétaires e
 - [x] Persistance via localStorage
 - [x] Design adapté pour tous les composants
 
+### Design Responsive - NOUVEAU (Février 2026)
+- [x] Menu hamburger sur mobile/tablette
+- [x] Sidebar coulissante (drawer) sur petit écran
+- [x] Header mobile avec logo compact
+- [x] Grilles adaptatives (1-2-3-4 colonnes selon l'écran)
+- [x] Formulaires responsifs (champs en colonnes sur desktop, empilés sur mobile)
+- [x] Textes et boutons ajustés pour mobile
+- [x] Fermeture automatique du menu sur navigation
+- [x] Support clavier (Escape pour fermer)
+
 ### Gestion des Documents
 - [x] Upload de fichiers (PDF, DOC, DOCX, JPG, PNG)
 - [x] Limite 10MB par fichier
