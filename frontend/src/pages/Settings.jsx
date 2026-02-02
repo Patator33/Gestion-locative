@@ -46,6 +46,18 @@ const Settings = () => {
   const [saving, setSaving] = useState(false);
   const [testingSmtp, setTestingSmtp] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
+  const [testingPush, setTestingPush] = useState(false);
+  
+  // Push notifications hook
+  const { 
+    isSupported: pushSupported, 
+    isSubscribed: pushSubscribed, 
+    isLoading: pushLoading,
+    permission: pushPermission,
+    subscribe: subscribeToPush, 
+    unsubscribe: unsubscribeFromPush,
+    sendTestNotification 
+  } = usePushNotifications();
 
   useEffect(() => {
     loadSettings();
