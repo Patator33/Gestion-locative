@@ -3,21 +3,25 @@ FROM node:20 AS builder
 
 WORKDIR /app
 
+# On vide le cache npm pour être sûr de repartir sur du propre
+RUN npm cache clean --force
+
 # Utilisation de npm avec flags de compatibilité maximum
 COPY package.json ./
-RUN npm install --legacy-peer-deps
+RUN npm install --legacy-peer-deps --verbose
 
 COPY . .
 
 ARG REACT_APP_BACKEND_URL
 ENV REACT_APP_BACKEND_URL=$REACT_APP_BACKEND_URL
 
-# Désactive les warnings bloquants et économise de la RAM
+# Configuration pour React 19 + react-scripts/craco
 ENV CI=false
 ENV GENERATE_SOURCEMAP=false
 ENV NODE_OPTIONS=--max-old-space-size=4096
 
-RUN npm run build
+# On affiche les logs détaillés pendant le build
+RUN npm run build --verbose
 
 # Étape 2: Serveur Nginx
 FROM nginx:alpine
