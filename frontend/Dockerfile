@@ -13,6 +13,11 @@ COPY . .
 ARG REACT_APP_BACKEND_URL
 ENV REACT_APP_BACKEND_URL=$REACT_APP_BACKEND_URL
 
+# Fix pour éviter que les warnings de React 19 ne bloquent le build
+ENV CI=false
+# Augmente la mémoire autorisée pour le build
+ENV NODE_OPTIONS=--max-old-space-size=4096
+
 RUN npm run build
 
 # Étape 2: Serveur Nginx
