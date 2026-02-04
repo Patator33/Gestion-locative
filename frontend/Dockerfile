@@ -1,10 +1,9 @@
 # Étape 1: Build
-FROM node:18 AS builder
+FROM node:20 AS builder
 
 WORKDIR /app
 
-# On utilise npm car il gère mieux les conflits de dépendances de React 19
-# via le flag --legacy-peer-deps quand le lockfile est absent.
+# Utilisation de npm avec flags de compatibilité maximum
 COPY package.json ./
 RUN npm install --legacy-peer-deps
 
@@ -13,9 +12,9 @@ COPY . .
 ARG REACT_APP_BACKEND_URL
 ENV REACT_APP_BACKEND_URL=$REACT_APP_BACKEND_URL
 
-# Fix pour éviter que les warnings de React 19 ne bloquent le build
+# Désactive les warnings bloquants et économise de la RAM
 ENV CI=false
-# Augmente la mémoire autorisée pour le build
+ENV GENERATE_SOURCEMAP=false
 ENV NODE_OPTIONS=--max-old-space-size=4096
 
 RUN npm run build
