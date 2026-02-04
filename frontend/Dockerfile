@@ -1,17 +1,19 @@
 # Étape 1: Build
-FROM node:18-alpine AS builder
+FROM node:18 AS builder
 
 WORKDIR /app
 
+# On utilise npm car il gère mieux les conflits de dépendances de React 19
+# via le flag --legacy-peer-deps quand le lockfile est absent.
 COPY package.json ./
-RUN yarn install
+RUN npm install --legacy-peer-deps
 
 COPY . .
 
 ARG REACT_APP_BACKEND_URL
 ENV REACT_APP_BACKEND_URL=$REACT_APP_BACKEND_URL
 
-RUN yarn build
+RUN npm run build
 
 # Étape 2: Serveur Nginx
 FROM nginx:alpine
